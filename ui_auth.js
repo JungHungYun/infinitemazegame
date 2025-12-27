@@ -22,6 +22,15 @@ function toggleAuthButtons(isSignedIn) {
     if (signOutBtn) signOutBtn.classList.toggle('hidden', !isSignedIn);
 }
 
+function clearAuthInputs() {
+    const emailEl = document.getElementById('auth-email');
+    const pwEl = document.getElementById('auth-password');
+    const nameEl = document.getElementById('auth-username');
+    if (emailEl) emailEl.value = '';
+    if (pwEl) pwEl.value = '';
+    if (nameEl) nameEl.value = '';
+}
+
 async function upsertProfile(userId, username) {
     if (!username) return;
     const sb = window.supabaseClient;
@@ -63,6 +72,8 @@ async function refreshAuthUI() {
     if (user) {
         setAuthStatus(`로그인됨: ${user.email}`);
         toggleAuthButtons(true);
+        // 로그인 상태에서는 입력값을 남겨둘 이유가 없으므로 정리
+        clearAuthInputs();
     } else {
         setAuthStatus('로그인하면 점수가 리더보드에 기록됩니다.');
         toggleAuthButtons(false);
@@ -120,6 +131,7 @@ function initAuthUI() {
         } else {
             await ensureProfileFromUser(data.user, username);
             setAuthMsg('회원가입 + 로그인 완료');
+            clearAuthInputs();
         }
         await refreshAuthUI();
         if (typeof leaderboardRefresh === 'function') leaderboardRefresh();
@@ -134,6 +146,7 @@ function initAuthUI() {
         if (error) return setAuthMsg(error.message, true);
         await ensureProfileFromUser(data?.user, username);
         setAuthMsg('로그인 완료');
+        clearAuthInputs();
         await refreshAuthUI();
         if (typeof leaderboardRefresh === 'function') leaderboardRefresh();
     });
