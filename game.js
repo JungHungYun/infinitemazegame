@@ -297,7 +297,12 @@ const state = {
         bgm: {
             tracks: [
                 'resource/bgm/alpha-drive-rhythms-264091.mp3',
+                'resource/bgm/8-strong-fighter-battle-game-bgm-264623.mp3',
+                'resource/bgm/aggressive-metal-sinister-111839.mp3',
+                'resource/bgm/crazy-bad-2-min-edit-electronic-rock-game-music-414772.mp3',
                 'resource/bgm/intense-phonk-heavy-metal-instrumental-226341.mp3',
+                'resource/bgm/livin-dead-276389.mp3',
+                'resource/bgm/raw-energetic-rock-music-261966.mp3',
                 'resource/bgm/shred-onwards-244212.mp3'
             ],
             idx: 0,
@@ -1590,6 +1595,126 @@ function initTitleScreenUI() {
     }
 }
 
+// 게임 다시하기: 페이지 새로고침 없이 런만 초기화(로그인 세션 유지)
+function restartRun() {
+    // 모달/효과 정리
+    try { if (typeof closeGameOverModal === 'function') closeGameOverModal(); } catch (_) {}
+    try { if (typeof closeSettingsModal === 'function') closeSettingsModal(); } catch (_) {}
+    try { if (typeof setWallRubContact === 'function') setWallRubContact(false, 0); } catch (_) {}
+
+    // 필수 상태 초기화(로그인/설정/오디오/조작 모드는 유지)
+    state.mode = 'WORLD';
+    state.currentChunk = { x: CONFIG.START_CHUNK_X, y: CONFIG.START_CHUNK_Y };
+    state.player.worldPos = { x: CONFIG.START_CHUNK_X, y: CONFIG.START_CHUNK_Y };
+    state.player.mazePos = { x: 8.5, y: 16.5 };
+    state.player.invincibleUntilMs = 0;
+    state.player.shieldCharges = 0;
+
+    // 어빌리티/인벤/점수/아이템 초기화
+    state.abilities = {
+        wallBreakUnlocked: false,
+        wallBreakSpeedMult: 1.0,
+        missileSpawnChanceMult: 1.0,
+        missileFieldSpawnBonus: 0,
+        maxFieldMissileItems: 1,
+        missileStunBonusMs: 0,
+        missileCount: 1,
+        moveSpeedMult: 1.0,
+        coinFieldSpawnBonus: 0,
+        heartDropChance: 0,
+        goldWallUnlocked: false,
+        goldWallProb: 0.03,
+        coinWallCoinAmount: 5,
+        coinGainBonus: 0,
+        wallDurabilityMultCommon: 1.0,
+        wallDurabilityMultRare: 1.0,
+        wallDurabilityMultEpic: 1.0,
+        wallDurabilityMultLegendary: 1.0,
+        missileWallBreakUnlocked: false,
+        missileWallBreakProb: 0.10,
+        missileGunpowderProb: 0,
+        shopSlots: 3,
+        talismanCount: 0,
+        killMissileUnlocked: false,
+        maxLives: 3,
+        shieldMax: 0,
+        boughtCountByRarity: { COMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+        rarityBonus: { COMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+    };
+    state.player.lives = state.abilities.maxLives;
+
+    state.inventory = { missiles: 0, gunpowder: 0 };
+    state.items = [];
+    state.hearts = [];
+    state.coins = 0;
+    state.score = 0;
+    state.missiles = [];
+    state.pendingMissileShots = [];
+    state.chaserProjectiles = [];
+
+    // FX 초기화(모바일 최적화 유지)
+    state.fx = {
+        particles: [],
+        shake: { amp: 0, t: 0 },
+        flash: { a: 0, color: '#fff' },
+        lastTrailMs: 0,
+        playerTint: { a: 0, r: 255, g: 210, b: 77 },
+        wallRubHeatMs: 0,
+        wallRubTargetMs: 5000,
+    };
+
+    // 추격자/보스 초기화
+    state.boss = { active: false, hp: 0, maxHp: 50, lastAttackMs: 0, lasers: [], missileSpawnMs: 0 };
+    state.chaser = {
+        active: false,
+        chunk: { x: CONFIG.START_CHUNK_X, y: CONFIG.START_CHUNK_Y },
+        pos: { x: 0.5, y: 0.5 },
+        path: [],
+        pathIndex: 0,
+        lastRepathMs: 0,
+        lastTargetTile: null,
+        graceUntilMs: 0,
+        stunUntilMs: 0,
+        lastShotMs: 0,
+        entryScheduledUntilMs: 0,
+        entryScheduledDir: 'S',
+        entryScheduledPos: null,
+        isPresentInMaze: false,
+        nextEntryDelayMs: CONFIG.CHASER_ENTRY_DELAY_MS,
+        caughtCount: 0,
+        speedMult: 1.0,
+        slowUntilMs: 0,
+        deadUntilNextChunk: false,
+        respawnTimerMs: 0,
+    };
+
+    // 청크/카메라/입구 초기화
+    state.chunks = new Map();
+    state.nextEntryDir = 'S';
+    state.currentEntryDir = 'S';
+    state.cameraY = state.player.worldPos.y * CONFIG.CHUNK_SIZE - state.view.h * 0.7;
+    generateVisibleChunks();
+
+    // UI 초기화(로그인 UI는 그대로)
+    state.ui.modalOpen = false;
+    state.ui.settingsOpen = false;
+    state.ui.gameOverOpen = false;
+    state.ui.pendingEnter = null;
+    state.ui.abilityNotice = '';
+    state.ui.abilityShownFloors = new Set();
+    state.ui.abilityChoices = [];
+    state.ui.boughtAbilities = new Set();
+    state.ui.abilityRerollCost = 1;
+    state.ui.runStartMs = state.nowMs;
+    state.ui.maxFloorReached = 1;
+    state.ui.bossKills = 0;
+
+    updateUI();
+}
+
+// 외부(UI)에서도 호출할 수 있게 노출
+window.restartRun = restartRun;
+
 // 어빌리티(상점) UI는 `ui_ability.js`로 분리되었습니다.
 
 function resize() {
@@ -1644,7 +1769,8 @@ function handleKeyDown(e) {
         const k = (e.key || '').toLowerCase();
         if (k === 'enter' || k === 'r') {
             e.preventDefault();
-            window.location.reload();
+            if (typeof window.restartRun === 'function') window.restartRun();
+            else window.location.reload();
         }
         return;
     }

@@ -9,7 +9,8 @@ function initGameOverUI() {
 
     restartBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        window.location.reload();
+        if (typeof window.restartRun === 'function') window.restartRun();
+        else window.location.reload();
     });
 }
 
