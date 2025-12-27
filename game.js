@@ -1612,6 +1612,22 @@ function init() {
         console.log("DEBUG MODE ENABLED: Wall break active, Max speed, Max move speed, 1000 coins, 1000 missiles.");
     }
 
+    // 개발자도구 console에서 debugmode 777 입력 시 디버그 모드 활성화
+    window.debugmode = function(code) {
+        if (code === 777) {
+            CONFIG.DEBUG = true;
+            state.abilities.wallBreakUnlocked = true;
+            state.abilities.wallBreakSpeedMult = CONFIG.MAX_WALL_BREAK_SPEED_MULT;
+            state.abilities.moveSpeedMult = CONFIG.MAX_MOVE_SPEED_MULT;
+            state.coins = 1000;
+            state.inventory.missiles = 1000;
+            console.log("DEBUG MODE ENABLED via console: Wall break active, Max speed, Max move speed, 1000 coins, 1000 missiles.");
+            if (typeof updateUI === 'function') updateUI();
+            return "Debug mode activated!";
+        }
+        return "Invalid code. Use: debugmode(777)";
+    };
+
     generateVisibleChunks();
     state.cameraY = state.player.worldPos.y * CONFIG.CHUNK_SIZE - state.view.h * 0.7;
     // 이미지 프리로드(실패해도 게임은 진행 가능: 폴백 렌더)
@@ -2614,8 +2630,8 @@ function update(dt) {
         }
         if (state.ui.settingsOpen) return; // 설정창이 열려있으면 게임 일시정지
         if (state.ui.modalOpen) return; // 어빌리티 선택 중엔 게임 일시정지
-        // 시간 경과에 따른 점수 감점: 1초에 2점(층수 배수 적용)
-        subScore(2 * (Math.min(dt, 80) / 1000), getFloor());
+        // 시간 경과에 따른 점수 감점: 1초에 1점(층수 배수 적용) - 절반으로 감소
+        subScore(1 * (Math.min(dt, 80) / 1000), getFloor());
         updateMaze(dt);
         updateChaser(dt);
         updateBoss(dt);
@@ -3154,6 +3170,8 @@ function updateCollectiblesAndProjectiles(dt) {
             if (dx * dx + dy * dy <= (CONFIG.PLAYER_RADIUS + 0.22) ** 2) {
                 c.picked = true;
                 addCoins(1);
+                // 동전 먹을 때 +5점
+                addScore(5, getFloor());
                 // SFX: 코인 획득
                 playSfx('resource/pick-coin-384921.mp3', { volume: 0.60, rate: 1.0 });
                 onPickupFx('coin');
