@@ -199,7 +199,7 @@ const state = {
         goldWallProb: 0.03, // 최초 3%
         coinWallCoinAmount: 5, // 코인 벽(사금벽) 파괴 시 기본 코인 획득량
         coinGainBonus: 0, // 모든 코인 획득량 +N
-        // 벽 내구도 약화(레벨별 추가 배수, 1회당 -1% = x0.99)
+        // 벽 내구도 약화(레벨별 추가 배수, 1회당 -2% = x0.98, 최대 50%까지)
         wallDurabilityMultCommon: 1.0,    // 갈/파/녹 (레벨 0~2)
         wallDurabilityMultRare: 1.0,      // 보/노/주 (레벨 3~5)
         wallDurabilityMultEpic: 1.0,      // 회/흰 (레벨 7~8)

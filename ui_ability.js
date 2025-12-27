@@ -314,45 +314,45 @@ const ABILITY_DEFS = [
     {
         id: 'weaken_wall_common',
         name: '일반 벽 약화',
-        desc: '갈색/파랑/녹색 벽 내구도 1% 감소',
+        desc: '갈색/파랑/녹색 벽 내구도 2% 감소 (최대 50%까지)',
         rarity: 'COMMON',
         cost: 3,
         available: () => true,
         apply: () => {
-            state.abilities.wallDurabilityMultCommon = Math.max(0.10, (state.abilities.wallDurabilityMultCommon ?? 1.0) * 0.99);
+            state.abilities.wallDurabilityMultCommon = Math.max(0.50, (state.abilities.wallDurabilityMultCommon ?? 1.0) * 0.98);
         },
     },
     {
         id: 'weaken_wall_rare',
         name: '희귀 벽 약화',
-        desc: '보라/노랑/주황 벽 내구도 1% 감소',
+        desc: '보라/노랑/주황 벽 내구도 2% 감소 (최대 50%까지)',
         rarity: 'RARE',
         cost: 5,
         available: () => true,
         apply: () => {
-            state.abilities.wallDurabilityMultRare = Math.max(0.10, (state.abilities.wallDurabilityMultRare ?? 1.0) * 0.99);
+            state.abilities.wallDurabilityMultRare = Math.max(0.50, (state.abilities.wallDurabilityMultRare ?? 1.0) * 0.98);
         },
     },
     {
         id: 'weaken_wall_epic',
         name: '영웅 벽 약화',
-        desc: '회색/흰색 벽 내구도 1% 감소',
+        desc: '회색/흰색 벽 내구도 2% 감소 (최대 50%까지)',
         rarity: 'EPIC',
         cost: 15,
         available: () => true,
         apply: () => {
-            state.abilities.wallDurabilityMultEpic = Math.max(0.10, (state.abilities.wallDurabilityMultEpic ?? 1.0) * 0.99);
+            state.abilities.wallDurabilityMultEpic = Math.max(0.50, (state.abilities.wallDurabilityMultEpic ?? 1.0) * 0.98);
         },
     },
     {
         id: 'weaken_wall_legendary',
         name: '전설 벽 약화',
-        desc: '검정(레벨) 벽 내구도 1% 감소',
+        desc: '검정(레벨) 벽 내구도 2% 감소 (최대 50%까지)',
         rarity: 'LEGENDARY',
         cost: 30,
         available: () => true,
         apply: () => {
-            state.abilities.wallDurabilityMultLegendary = Math.max(0.10, (state.abilities.wallDurabilityMultLegendary ?? 1.0) * 0.99);
+            state.abilities.wallDurabilityMultLegendary = Math.max(0.50, (state.abilities.wallDurabilityMultLegendary ?? 1.0) * 0.98);
         },
     },
     {
