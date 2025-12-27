@@ -11,10 +11,20 @@ function initAbilityModalUI() {
 
     rerollBtn.addEventListener('click', () => {
         if (!state.ui.modalOpen) return;
-        const cost = state.ui.abilityRerollCost;
+        const freeLeft = Math.max(0, Math.floor(state.ui.freeRerollsLeft || 0));
+        const isFree = freeLeft > 0;
+        const cost = isFree ? 0 : state.ui.abilityRerollCost;
         if (state.coins < cost) return;
         state.coins -= cost;
-        state.ui.abilityRerollCost += 1; // 리롤할 때마다 비용 증가
+        if (isFree) {
+            state.ui.freeRerollsLeft = freeLeft - 1;
+            // 무료 소진 시 티켓 구매 직전 비용으로 복구
+            if (state.ui.freeRerollsLeft <= 0) {
+                state.ui.abilityRerollCost = Math.max(1, Math.floor(state.ui.freeRerollRestoreCost || state.ui.abilityRerollCost || 1));
+            }
+        } else {
+            state.ui.abilityRerollCost += 1; // 유료 리롤할 때마다 비용 증가
+        }
         state.ui.boughtAbilities.clear(); // 리롤하면 다시 구매 가능
         rollAbilityChoices();
 
@@ -30,6 +40,88 @@ function initAbilityModalUI() {
 }
 
 const ABILITY_DEFS = [
+    // ===== 금융 어빌리티(추가 비용 상승 없음) =====
+    {
+        id: 'bank_deposit',
+        name: '예금',
+        desc: '10초에 한번 1코인 획득. 획득할 때마다 -0.25초(최대 -9초, 최소 1초).',
+        rarity: 'RARE',
+        cost: 5,
+        noExtraCost: true,
+        available: () => !state.abilities.bankDeposit?.enabled,
+        apply: () => {
+            state.abilities.bankDeposit = { enabled: true, intervalMs: 10000, timerMs: 0 };
+        },
+    },
+    {
+        id: 'bank_saving',
+        name: '적금',
+        desc: '다섯개 층 통과할 때마다 이자 10코인. 획득할 때마다 필요 층수 -1(최소 1층).',
+        rarity: 'EPIC',
+        cost: 20,
+        noExtraCost: true,
+        available: () => !state.abilities.bankSaving?.enabled,
+        apply: () => {
+            state.abilities.bankSaving = { enabled: true, targetFloors: 5, progress: 0 };
+        },
+    },
+    {
+        id: 'living_loan',
+        name: '생활비 대출',
+        desc: '즉시 +20코인. 5개 층 통과 이후 5초당 1코인 상환. 코인이 음수면 1초당 추가 상환액 +1 증가.',
+        rarity: 'EPIC',
+        cost: -20, // 보너스
+        noExtraCost: true,
+        available: () => true,
+        apply: () => {
+            if (!state.abilities.livingLoan) state.abilities.livingLoan = { debt: 0, graceFloors: 0, repayAccMs: 0, penaltyAccMs: 0, penaltyRate: 0 };
+            state.abilities.livingLoan.debt = (state.abilities.livingLoan.debt || 0) + 20;
+            state.abilities.livingLoan.graceFloors = Math.max(state.abilities.livingLoan.graceFloors || 0, 5);
+        },
+    },
+    {
+        id: 'life_loan',
+        name: '생명담보대출',
+        desc: '즉시 +50코인. 목숨 2개 즉시 소모. 목숨이 0 이하가 되면 게임 오버.',
+        rarity: 'EPIC',
+        cost: -50, // 보너스
+        noExtraCost: true,
+        available: () => true,
+        apply: () => {
+            state.player.lives = (state.player.lives || 0) - 2;
+            if (state.player.lives <= 0) {
+                state.player.lives = 0;
+                if (typeof openGameOverModal === 'function') openGameOverModal();
+            }
+            if (typeof updateUI === 'function') updateUI();
+        },
+    },
+    {
+        id: 'small_luck',
+        name: '작은 행운',
+        desc: '즉시 +5코인.',
+        rarity: 'COMMON',
+        cost: -5, // 보너스
+        noExtraCost: true,
+        available: () => true,
+        apply: () => {},
+    },
+    {
+        id: 'free_ticket',
+        name: '무료 티켓',
+        desc: '리롤 비용을 3회 무료로 만듭니다. 무료 소진 후엔 구매 직전 리롤 비용으로 되돌립니다.',
+        rarity: 'COMMON',
+        cost: 3,
+        noExtraCost: true,
+        available: () => true,
+        apply: () => {
+            const add = 3;
+            state.abilities.freeRerollTickets = (state.abilities.freeRerollTickets || 0) + add;
+            state.ui.freeRerollsLeft = (state.ui.freeRerollsLeft || 0) + add;
+            state.abilities.freeRerollRestoreCost = state.ui.abilityRerollCost || 1;
+            state.ui.freeRerollRestoreCost = state.ui.abilityRerollCost || 1;
+        },
+    },
     {
         id: 'wall_break_speed',
         name: '벽부수기 속도 +10%',
@@ -321,6 +413,10 @@ function openAbilityModal(floor) {
     // 화면은 월드로 두고(정지), 모달만 표시
     state.mode = 'WORLD';
     state.ui.abilityRerollCost = 1; // 층마다 리롤 비용 초기화
+    // 무료 티켓: 남아있는 티켓을 이번 상점에 반영
+    state.ui.freeRerollsLeft = Math.max(0, Math.floor(state.abilities.freeRerollTickets || 0));
+    // 티켓은 "해당 상점(스테이지)"에서만 리롤 비용을 바꾸므로, 매 상점 시작 비용(기본 1)으로 리셋
+    state.ui.freeRerollRestoreCost = Math.max(1, Math.floor(state.ui.abilityRerollCost || 1));
     state.ui.boughtAbilities.clear();
     rollAbilityChoices();
     renderAbilityModal(floor);
@@ -337,6 +433,12 @@ function closeAbilityModal() {
     state.ui.modalOpen = false;
     // 공지는 닫을 때 초기화(다음 상점에서 재사용 방지)
     state.ui.abilityNotice = '';
+    // 무료 티켓 잔여를 능력치에 다시 반영
+    state.abilities.freeRerollTickets = Math.max(0, Math.floor(state.ui.freeRerollsLeft || 0));
+    // 층이 오르면 리롤 비용은 다시 1로 초기화되므로 restoreCost는 유지하지 않음
+    state.abilities.freeRerollRestoreCost = 1;
+    state.ui.freeRerollsLeft = 0;
+    state.ui.freeRerollRestoreCost = 1;
 
     // 대기 중인 청크 진입이 있으면 실행
     if (state.ui.pendingEnter) {
@@ -416,11 +518,13 @@ function renderAbilityModal(floor = getFloor()) {
 
     if (coinsEl) coinsEl.textContent = String(state.coins);
     if (floorEl) floorEl.textContent = String(floor);
-    if (rerollCostEl) rerollCostEl.textContent = String(state.ui.abilityRerollCost);
-    if (rerollBtn) rerollBtn.disabled = state.coins < state.ui.abilityRerollCost;
+    const freeLeft = Math.max(0, Math.floor(state.ui.freeRerollsLeft || 0));
+    if (rerollCostEl) rerollCostEl.textContent = freeLeft > 0 ? `무료x${freeLeft}` : String(state.ui.abilityRerollCost);
     if (rerollBtn) {
-        rerollBtn.title = (state.coins < state.ui.abilityRerollCost)
-            ? `코인이 부족합니다. (필요: ${state.ui.abilityRerollCost})`
+        const cost = freeLeft > 0 ? 0 : state.ui.abilityRerollCost;
+        rerollBtn.disabled = state.coins < cost;
+        rerollBtn.title = (state.coins < cost)
+            ? `코인이 부족합니다. (필요: ${cost})`
             : '';
     }
 
@@ -476,14 +580,15 @@ function renderAbilityModal(floor = getFloor()) {
         desc.textContent = def.desc;
 
         const costEl = document.createElement('div');
-        const extraCost = (state.abilities.boughtCountByRarity[def.rarity] || 0) * (def.rarity === 'COMMON' ? 1 : def.rarity === 'RARE' ? 2 : def.rarity === 'EPIC' ? 5 : 10);
+        const extraCost = def.noExtraCost ? 0
+            : (state.abilities.boughtCountByRarity[def.rarity] || 0) * (def.rarity === 'COMMON' ? 1 : def.rarity === 'RARE' ? 2 : def.rarity === 'EPIC' ? 5 : 10);
         const finalCost = def.cost + extraCost;
         const meetsReq = (typeof def.requires === 'function') ? !!def.requires() : true;
-        const canBuy = state.coins >= finalCost && def.available() && meetsReq && !isBought;
+        const canBuy = (finalCost <= 0 || state.coins >= finalCost) && def.available() && meetsReq && !isBought;
 
         costEl.className = 'ability-cost';
-        costEl.textContent = `비용: ${finalCost}`;
-        if (!isBought && !canBuy && meetsReq && state.coins < finalCost) {
+        costEl.textContent = finalCost < 0 ? `보너스: +${Math.abs(finalCost)}` : `비용: ${finalCost}`;
+        if (!isBought && !canBuy && meetsReq && finalCost > 0 && state.coins < finalCost) {
             costEl.classList.add('insufficient');
         }
 
@@ -506,12 +611,12 @@ function renderAbilityModal(floor = getFloor()) {
             : '';
         btn.addEventListener('click', () => {
             if (!state.ui.modalOpen) return;
-            if (state.coins < finalCost) return;
+            if (finalCost > 0 && state.coins < finalCost) return;
             if (!def.available() || state.ui.boughtAbilities.has(id)) return;
             if ((typeof def.requires === 'function') && !def.requires()) return;
 
             state.coins -= finalCost;
-            state.abilities.boughtCountByRarity[def.rarity]++;
+            if (!def.noExtraCost) state.abilities.boughtCountByRarity[def.rarity]++;
             state.ui.boughtAbilities.add(id);
             def.apply();
             renderAbilityModal(floor);
