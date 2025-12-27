@@ -5,9 +5,63 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// 리소스: 추격자 이미지(오른쪽이 진행 방향)
+// 리소스: 이미지(오른쪽이 진행 방향)
 const CHASER_IMG = new Image();
-CHASER_IMG.src = 'resource/imgage/chaser.png';
+const MISSILE_IMG = new Image();         // 플레이어 미사일
+const CHASER_MISSILE_IMG = new Image();  // 추격자 미사일
+
+function loadImageWithDebug(img, url, label) {
+    return new Promise((resolve, reject) => {
+        let done = false;
+        const finish = (ok, err) => {
+            if (done) return;
+            done = true;
+            img.onload = null;
+            img.onerror = null;
+            ok ? resolve(true) : reject(err || new Error(`${label} 로드 실패`));
+        };
+
+        img.onload = () => finish(true);
+        img.onerror = () => finish(false, new Error(`${label} 로드 실패: ${url}`));
+        // 상대경로 안정화(배포/라우팅 케이스)
+        img.src = url.startsWith('./') ? url : `./${url.replace(/^\.\//, '')}`;
+
+        // 안전장치: decode() 가능하면 성공/실패를 더 확실히 감지
+        if (typeof img.decode === 'function') {
+            img.decode().then(() => finish(true)).catch((e) => {
+                // decode가 실패해도 onload로 올 수 있으니 약간 유예
+                setTimeout(() => {
+                    if (img.complete && img.naturalWidth > 0) finish(true);
+                    else finish(false, e || new Error(`${label} decode 실패`));
+                }, 0);
+            });
+        }
+    });
+}
+
+// 프리로드 상태
+let GAME_IMG_READY = false;
+let GAME_IMG_ERROR = '';
+
+async function preloadGameImages() {
+    // 중복 호출 방지
+    if (GAME_IMG_READY) return true;
+    try {
+        await Promise.all([
+            loadImageWithDebug(CHASER_IMG, 'resource/imgage/chaser.png', '추격자 이미지'),
+            loadImageWithDebug(MISSILE_IMG, 'resource/imgage/misslie.png', '플레이어 미사일 이미지'),
+            loadImageWithDebug(CHASER_MISSILE_IMG, 'resource/imgage/chaser_misslie.png', '추격자 미사일 이미지'),
+        ]);
+        GAME_IMG_READY = true;
+        GAME_IMG_ERROR = '';
+        return true;
+    } catch (e) {
+        GAME_IMG_READY = false;
+        GAME_IMG_ERROR = String(e?.message || e);
+        console.warn('[assets] image preload failed:', e);
+        return false;
+    }
+}
 
 // 게임 상태
 const state = {
@@ -1381,6 +1435,8 @@ function init() {
 
     generateVisibleChunks();
     state.cameraY = state.player.worldPos.y * CONFIG.CHUNK_SIZE - state.view.h * 0.7;
+    // 이미지 프리로드(실패해도 게임은 진행 가능: 폴백 렌더)
+    preloadGameImages().catch(() => {});
     
     requestAnimationFrame(gameLoop);
 }
@@ -1496,8 +1552,21 @@ function initTitleScreenUI() {
     el.classList.remove('hidden');
     state.ui.started = false;
 
-    const start = () => {
+    const start = async () => {
         if (state.ui.started) return;
+        // 이미지가 반영되지 않는 문제 방지: 시작 전에 프리로드를 1회 기다림
+        if (btn) {
+            btn.disabled = true;
+            const oldText = btn.textContent;
+            btn.textContent = '로딩중...';
+            const ok = await preloadGameImages();
+            // 실패해도 폴백 렌더(원/벡터)로 진행 가능
+            btn.disabled = false;
+            btn.textContent = oldText || '시작';
+            if (!ok && GAME_IMG_ERROR) {
+                console.warn('[assets] continue with fallback:', GAME_IMG_ERROR);
+            }
+        }
         state.ui.started = true;
         el.classList.add('hidden');
         // 런 시작 시간/최고 층 초기화
@@ -4130,7 +4199,7 @@ function drawMaze() {
         } catch (_) {}
 
         // 이미지가 아직 로드되지 않았으면 기존 원 형태로 폴백
-        const imgReady = CHASER_IMG && CHASER_IMG.complete && CHASER_IMG.naturalWidth > 0;
+        const imgReady = !!(CHASER_IMG && CHASER_IMG.complete && CHASER_IMG.naturalWidth > 0);
         if (imgReady) {
             const size = cellSize * CONFIG.CHASER_RADIUS * 2.4;
             ctx.save();
@@ -4171,14 +4240,30 @@ function drawMaze() {
     for (const p of state.chaserProjectiles) {
         const px = offsetX + p.pos.x * cellSize;
         const py = offsetY + p.pos.y * cellSize;
-        ctx.save();
-        ctx.fillStyle = '#ff0000';
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = 'red';
-        ctx.beginPath();
-        ctx.arc(px, py, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        const vx = p.vel?.x ?? 0;
+        const vy = p.vel?.y ?? 0;
+        const ang = Math.atan2(vy, vx);
+        const imgReady = !!(CHASER_MISSILE_IMG && CHASER_MISSILE_IMG.complete && CHASER_MISSILE_IMG.naturalWidth > 0);
+        if (imgReady) {
+            const size = cellSize * 0.65;
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate(ang);
+            ctx.globalAlpha = 0.95;
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = 'rgba(255, 80, 80, 0.8)';
+            ctx.drawImage(CHASER_MISSILE_IMG, -size / 2, -size / 2, size, size);
+            ctx.restore();
+        } else {
+            ctx.save();
+            ctx.fillStyle = '#ff0000';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'red';
+            ctx.beginPath();
+            ctx.arc(px, py, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
     }
 
     // 코인 렌더(픽셀 블록 느낌)
@@ -4210,6 +4295,18 @@ function drawMaze() {
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(angle);
+
+        // 이미지가 있으면 이미지를 우선 사용(오른쪽이 전방)
+        const imgReady = !!(MISSILE_IMG && MISSILE_IMG.complete && MISSILE_IMG.naturalWidth > 0);
+        if (imgReady) {
+            const size = scale * (isItem ? 2.2 : 2.6);
+            ctx.globalAlpha = 0.98;
+            ctx.shadowBlur = isItem ? 14 : 20;
+            ctx.shadowColor = isItem ? 'rgba(255,210,77,0.85)' : 'rgba(255,240,200,0.85)';
+            ctx.drawImage(MISSILE_IMG, -size / 2, -size / 2, size, size);
+            ctx.restore();
+            return;
+        }
 
         const L = scale * (isItem ? 1.25 : 1.55);
         const W = scale * (isItem ? 0.45 : 0.55);
