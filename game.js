@@ -3384,6 +3384,9 @@ function onMissileHitTarget(m) {
             const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
             if (chunk) chunk.cleared = true;
             addScore(1000, getFloor());
+            // 보스 처치 보상: 층수 x 3 코인
+            const floor = getFloor();
+            addCoins(floor * 3);
 
             // 보스방 종료 직후 추격자/추격자 미사일이 튀어나오는 현상 방지:
             // - 기존 발사체 제거
