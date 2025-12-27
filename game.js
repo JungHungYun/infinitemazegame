@@ -1349,30 +1349,6 @@ function initTitleScreenUI() {
     };
 
     if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); start(); });
-
-    // 로그인 입력창이 추가되었으므로, "키 입력"으로 시작할 때는 입력 포커스면 무시해야 함.
-    const onKeyDownStart = (e) => {
-        const ae = document.activeElement;
-        const tag = (ae?.tagName || '').toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-        start();
-        window.removeEventListener('keydown', onKeyDownStart);
-    };
-    window.addEventListener('keydown', onKeyDownStart);
-
-    // 오버레이 클릭으로 시작: 카드 내부 클릭(로그인/버튼 등)은 무시
-    el.addEventListener('click', (e) => {
-        const insideCard = !!e.target?.closest?.('.title-card');
-        if (insideCard) return;
-        e.preventDefault();
-        start();
-    });
-    el.addEventListener('touchstart', (e) => {
-        const insideCard = !!e.target?.closest?.('.title-card');
-        if (insideCard) return;
-        e.preventDefault();
-        start();
-    }, { passive: false });
 }
 
 // 어빌리티(상점) UI는 `ui_ability.js`로 분리되었습니다.
