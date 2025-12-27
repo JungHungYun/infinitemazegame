@@ -5,6 +5,10 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// 리소스: 추격자 이미지(오른쪽이 진행 방향)
+const CHASER_IMG = new Image();
+CHASER_IMG.src = 'resource/imgage/chaser.png';
+
 // 게임 상태
 const state = {
     mode: 'WORLD', // 'WORLD' 또는 'MAZE'
@@ -813,7 +817,10 @@ function buildChunkMazeTexture(chunk) {
 
 function fxAddParticle(p) {
     state.fx.particles.push(p);
-    const max = CONFIG.FX_PARTICLE_MAX;
+    // 모바일 최적화: 파티클 최대치를 PC 대비 30%로 축소
+    const mult = (state.ui?.isMobile ? 0.3 : 1.0);
+    const baseMax = CONFIG.FX_PARTICLE_MAX;
+    const max = Math.max(20, Math.floor(baseMax * mult));
     if (state.fx.particles.length > max) {
         state.fx.particles.splice(0, state.fx.particles.length - max);
     }
@@ -834,7 +841,11 @@ function fxBurstMaze(x, y, opts = {}) {
         glow = 18,
     } = opts;
 
-    for (let i = 0; i < count; i++) {
+    // 모바일 최적화: 파티클 발생량을 PC 대비 30%로 축소
+    const mult = (state.ui?.isMobile ? 0.3 : 1.0);
+    const effCount = Math.max(1, Math.round(count * mult));
+
+    for (let i = 0; i < effCount; i++) {
         const a = dir + (rand(-0.5, 0.5) * cone);
         const sp = speed * rand(0.45, 1.0);
         fxAddParticle({
@@ -3892,6 +3903,9 @@ function drawMaze() {
     }
 
     // 마우스 가이드 라인 - 플레이어 위치 기준
+    // 자이로 모드에서는 커서 개념이 약하므로 라인을 표시하지 않음
+    const isGyroMode = !!(state.ui?.isMobile && state.controls?.mobileMode === 'gyro' && state.controls?.gyro?.enabled);
+    if (!isGyroMode) {
         const pGuideX = offsetX + state.player.mazePos.x * cellSize;
         const pGuideY = offsetY + state.player.mazePos.y * cellSize;
         ctx.strokeStyle = 'rgba(0, 255, 255, 0.25)';
@@ -3901,6 +3915,7 @@ function drawMaze() {
         ctx.lineTo(state.mouse.x, state.mouse.y);
         ctx.stroke();
         ctx.setLineDash([]);
+    }
 
     // 플레이어 (미로 내부)
     const pScreenX = offsetX + state.player.mazePos.x * cellSize;
@@ -4094,13 +4109,47 @@ function drawMaze() {
             alpha *= (Math.sin(state.nowMs * 0.02) * 0.5 + 0.5);
         }
 
-        ctx.fillStyle = `rgba(255, 80, 80, ${alpha})`;
-        ctx.shadowBlur = 25;
-        ctx.shadowColor = 'rgba(255, 80, 80, 0.9)';
-        ctx.beginPath();
-        ctx.arc(cX, cY, cellSize * CONFIG.CHASER_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        // 진행 방향(오른쪽이 전방) 기준 회전 각도 계산
+        let ang = 0;
+        try {
+            const path = state.chaser.path || [];
+            const idx = state.chaser.pathIndex ?? 0;
+            if (path.length > 0 && idx < path.length) {
+                const tgt = path[Math.min(idx, path.length - 1)];
+                const tx = (tgt.x ?? 0) + 0.5;
+                const ty = (tgt.y ?? 0) + 0.5;
+                const dx = tx - state.chaser.pos.x;
+                const dy = ty - state.chaser.pos.y;
+                ang = Math.atan2(dy, dx);
+            } else {
+                // 폴백: 플레이어 방향
+                const dx = state.player.mazePos.x - state.chaser.pos.x;
+                const dy = state.player.mazePos.y - state.chaser.pos.y;
+                ang = Math.atan2(dy, dx);
+            }
+        } catch (_) {}
+
+        // 이미지가 아직 로드되지 않았으면 기존 원 형태로 폴백
+        const imgReady = CHASER_IMG && CHASER_IMG.complete && CHASER_IMG.naturalWidth > 0;
+        if (imgReady) {
+            const size = cellSize * CONFIG.CHASER_RADIUS * 2.4;
+            ctx.save();
+            ctx.translate(cX, cY);
+            ctx.rotate(ang);
+            ctx.globalAlpha = alpha;
+            ctx.shadowBlur = 18;
+            ctx.shadowColor = 'rgba(255, 80, 80, 0.65)';
+            ctx.drawImage(CHASER_IMG, -size / 2, -size / 2, size, size);
+            ctx.restore();
+        } else {
+            ctx.fillStyle = `rgba(255, 80, 80, ${alpha})`;
+            ctx.shadowBlur = 25;
+            ctx.shadowColor = 'rgba(255, 80, 80, 0.9)';
+            ctx.beginPath();
+            ctx.arc(cX, cY, cellSize * CONFIG.CHASER_RADIUS, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
 
         // 스턴 링(맞았을 때)
         if (state.nowMs < state.chaser.stunUntilMs) {

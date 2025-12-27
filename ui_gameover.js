@@ -69,6 +69,11 @@ function openGameOverModal() {
     // 사운드 정리(마찰음은 유지할 이유가 없음)
     if (typeof setWallRubContact === 'function') setWallRubContact(false, 0);
 
+    // 게임 오버 효과음
+    if (typeof playSfx === 'function') {
+        try { playSfx('resource/game-over-arcade-6435.mp3'); } catch (_) {}
+    }
+
     // 리더보드 업로드(로그인한 경우에만)
     if (typeof window.leaderboardSubmitScore === 'function') {
         window.leaderboardSubmitScore({ score, floor }).catch?.(() => {});
