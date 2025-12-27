@@ -3690,8 +3690,8 @@ function addScore(base, floor = getFloor()) {
     const m = getScoreMultiplierForFloor(floor);
     const actualGain = base * m;
     state.score = Math.max(0, state.score + actualGain);
-    // 점수 증감 팝업 표시
-    if (actualGain > 0) {
+    // 점수 증감 팝업 표시 (0이 아닐 때만)
+    if (actualGain > 0 && Math.floor(actualGain) > 0) {
         addScorePopup(`+${Math.floor(actualGain)}`, true);
     }
 }
@@ -3700,8 +3700,8 @@ function subScore(base, floor = getFloor()) {
     const m = getScoreMultiplierForFloor(floor);
     const actualLoss = base * m;
     state.score = Math.max(0, state.score - actualLoss);
-    // 점수 감소 팝업 표시
-    if (actualLoss > 0) {
+    // 점수 감소 팝업 표시 (0이 아닐 때만)
+    if (actualLoss > 0 && Math.floor(actualLoss) > 0) {
         addScorePopup(`-${Math.floor(actualLoss)}`, false);
     }
 }
