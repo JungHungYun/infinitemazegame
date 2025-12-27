@@ -2527,6 +2527,9 @@ function updateBoss(dt) {
         state.boss.missileSpawnMs = state.nowMs;
         // 보스전에서는 추격자 비활성화
         state.chaser.isPresentInMaze = false;
+        // 보스전 중에는 추격자 미사일이 나오면 안됨(기존 발사체도 제거)
+        state.chaserProjectiles = [];
+        state.chaser.lastShotMs = state.nowMs;
     }
 
     const getBossLaserWarnMs = () => {
@@ -2682,6 +2685,8 @@ function updateMaze(dt) {
 
 function updateChaser(dt) {
     if (!state.chaser.active) return;
+    // 보스전 중에는 추격자 미사일/로직 자체를 진행하지 않음
+    if (state.boss.active) return;
     // 추격자는 플레이어와 같은 청크에 있다고 가정(청크 넘어갈 때 함께 진입)
     const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
     const maze = chunk.maze;
@@ -3357,7 +3362,8 @@ function getWallLevelDistribution(floor) {
         const prevLvDef = CONFIG.WALL_LEVELS[i - 1];
         
         // 이전 레벨이 100%가 된 층 + 10층부터 새 레벨이 나타나기 시작
-        const startAppearingFloor = currentFloorThreshold + 10;
+        // 요구사항: 파랑(레벨 1)은 21층 이후부터 등장
+        const startAppearingFloor = currentFloorThreshold + (i === 1 ? 20 : 10);
         
         if (floor < startAppearingFloor) {
             // 아직 새 레벨이 등장하기 전임. 현재 baseLevel이 100%
