@@ -535,7 +535,7 @@ function renderAbilityModal(floor = getFloor()) {
 
     if (coinsEl) coinsEl.textContent = String(state.coins);
     if (floorEl) floorEl.textContent = String(floor);
-    const freeLeft = Math.max(0, Math.floor(state.abilities?.freeRerollTickets ?? 0));
+    const freeLeft = Math.max(0, Math.floor(state.ui.freeRerollsLeft ?? 0));
     if (rerollCostEl) {
         rerollCostEl.textContent = (freeLeft > 0)
             ? `0 (무료 ${freeLeft})`
@@ -547,7 +547,7 @@ function renderAbilityModal(floor = getFloor()) {
             ? `무료 리롤 ${freeLeft}회 남음`
             : ((state.coins < state.ui.abilityRerollCost)
                 ? `코인이 부족합니다. (필요: ${state.ui.abilityRerollCost})`
-                : '');
+                : `리롤 (비용: ${state.ui.abilityRerollCost} 코인)`);
     }
 
     if (statusEl) {
