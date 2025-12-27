@@ -1602,6 +1602,9 @@ function calibrateGyroNeutral() {
 function onDeviceOrientation(e) {
     const g = state.controls.gyro;
     if (!g) return;
+    // UI에서 "센서 이벤트가 실제로 들어오는지" 판단할 수 있도록 메타 기록
+    g._eventCount = (g._eventCount || 0) + 1;
+    g._lastEventTs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     // 숫자만 반영(브라우저에 따라 null 가능)
     if (typeof e.alpha === 'number') g.alpha = e.alpha;
     if (typeof e.beta === 'number') g.beta = e.beta;
@@ -2806,8 +2809,10 @@ function updateMaze(dt) {
     const pScreenY = offsetY + state.player.mazePos.y * cellSize;
     
     let dx, dy;
-    // 모바일 + 자이로 모드면 "기울기 → 가상 마우스 오프셋"으로 이동 입력을 만듦
-    if (state.ui.isMobile && state.controls?.mobileMode === 'gyro' && state.controls.gyro?.enabled) {
+    // 자이로 모드면(모바일 판정과 무관) "기울기 → 가상 마우스 오프셋"으로 이동 입력을 만듦
+    // NOTE: 일부 기기/브라우저는 터치 디바이스지만 pointer/hover 판정이 달라 state.ui.isMobile이 false일 수 있음.
+    //       사용자가 자이로 모드를 선택했다면 그 의도를 우선합니다.
+    if (state.controls?.mobileMode === 'gyro' && state.controls.gyro?.enabled) {
         const g = state.controls.gyro;
         const beta = (g.beta || 0) - (g.hasNeutral ? (g.neutralBeta || 0) : 0);
         const gamma = (g.gamma || 0) - (g.hasNeutral ? (g.neutralGamma || 0) : 0);
