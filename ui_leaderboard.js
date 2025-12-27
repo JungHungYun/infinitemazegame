@@ -58,6 +58,17 @@ function setLeaderboardMsg(msg, isError = false) {
     el.style.color = isError ? '#ff9aa2' : '#9a9a9a';
 }
 
+function withTimeout(promise, ms, label = '요청') {
+    let t = null;
+    const timeout = new Promise((_, reject) => {
+        t = setTimeout(() => reject(new Error(`${label} 타임아웃(${ms}ms). 네트워크/차단(광고차단/기업망)/Supabase 장애를 확인하세요.`)), ms);
+    });
+    return Promise.race([
+        promise.finally(() => { if (t) clearTimeout(t); }),
+        timeout,
+    ]);
+}
+
 function isSchemaCacheMissingError(err) {
     const m = String(err?.message || '');
     return m.includes("schema cache") || m.includes("Could not find the table") || m.includes("leaderboard_view");
@@ -110,20 +121,25 @@ async function leaderboardRefresh() {
     try {
         const root = document.getElementById('leaderboard');
         if (root) {
-            root.innerHTML = '<div class="lb-row muted">불러오는 중...</div>';
+            root.innerHTML = '<div class="lb-row muted">리더보드 로딩중... (v20251227_2)</div>';
         }
     } catch (_) {}
 
-    setLeaderboardMsg('');
+    setLeaderboardMsg('리더보드 조회 중...');
 
     // 1) 우선 view 기반 (가장 빠름)
-    const { data, error } = await sb
-        .from('leaderboard_view')
-        .select('rank,user_id,score,floor,display_name,updated_at')
-        .order('rank', { ascending: true })
-        .limit(10);
+    const { data, error } = await withTimeout(
+        sb
+            .from('leaderboard_view')
+            .select('rank,user_id,score,floor,display_name,updated_at')
+            .order('rank', { ascending: true })
+            .limit(10),
+        8000,
+        'leaderboard_view 조회'
+    );
 
     if (!error) {
+        setLeaderboardMsg('');
         const rows = (data || []).map((r) => ({
             rank: r.rank,
             user_id: r.user_id,
@@ -140,11 +156,15 @@ async function leaderboardRefresh() {
         const inTop10 = rows.some(r => r.user_id === myId);
         if (inTop10) return;
 
-        const { data: myRow, error: myErr } = await sb
-            .from('leaderboard_view')
-            .select('rank,user_id,score,floor,display_name,updated_at')
-            .eq('user_id', myId)
-            .maybeSingle();
+        const { data: myRow, error: myErr } = await withTimeout(
+            sb
+                .from('leaderboard_view')
+                .select('rank,user_id,score,floor,display_name,updated_at')
+                .eq('user_id', myId)
+                .maybeSingle(),
+            8000,
+            '내 순위 조회'
+        );
 
         if (!myErr && myRow) {
             renderLeaderboardRows([
@@ -165,10 +185,14 @@ async function leaderboardRefresh() {
 
     // 폴백: leaderboard_best를 직접 읽고 클라에서 랭킹 계산
     setLeaderboardMsg('리더보드 뷰가 아직 준비되지 않아 폴백 모드로 표시 중입니다.', true);
-    const { data: best, error: bestErr } = await sb
-        .from('leaderboard_best')
-        .select('user_id,score,floor,updated_at')
-        .limit(500);
+    const { data: best, error: bestErr } = await withTimeout(
+        sb
+            .from('leaderboard_best')
+            .select('user_id,score,floor,updated_at')
+            .limit(500),
+        8000,
+        'leaderboard_best 조회'
+    );
     if (bestErr) {
         setLeaderboardMsg(bestErr.message, true);
         renderLeaderboardRows([]);
