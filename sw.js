@@ -1,7 +1,7 @@
 // Service Worker: 네트워크 우선(Network-first)으로 최신 자원을 우선 로드하고,
 // 오프라인/일시 장애 시 캐시로 폴백합니다.
 
-const CACHE_NAME = 'maze-cache-v20251227_3';
+const CACHE_NAME = 'maze-cache-v20251227_4';
 
 self.addEventListener('install', (event) => {
   // 즉시 대기열을 건너뛰고 활성화 시도(업데이트 반영 빠르게)

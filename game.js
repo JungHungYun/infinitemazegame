@@ -1477,6 +1477,7 @@ function initHudUI() {
 function initTitleScreenUI() {
     const el = document.getElementById('title-screen');
     const btn = document.getElementById('title-start');
+    const settingsBtn = document.getElementById('title-settings');
     if (!el) return;
 
     // 초기엔 타이틀 화면 표시
@@ -1498,6 +1499,14 @@ function initTitleScreenUI() {
     };
 
     if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); start(); });
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            unlockAudioOnce();
+            openSettingsModal();
+        });
+    }
 }
 
 // 어빌리티(상점) UI는 `ui_ability.js`로 분리되었습니다.
