@@ -123,7 +123,7 @@ async function leaderboardRefresh() {
     try {
         const root = document.getElementById('leaderboard');
         if (root) {
-            root.innerHTML = '<div class="lb-row muted">리더보드 로딩중... (v20251227_5)</div>';
+            root.innerHTML = '<div class="lb-row muted">리더보드 로딩중... (v20251227_6)</div>';
         }
     } catch (_) {}
 
@@ -142,7 +142,11 @@ async function leaderboardRefresh() {
             'leaderboard_view 조회'
         ));
     } catch (err) {
-        setLeaderboardMsg(String(err?.message || err), true);
+        const raw = String(err?.message || err);
+        // 시크릿에서만 되는 경우: 확장프로그램(광고차단/보안) 차단 가능성이 큼
+        const hint = ' (시크릿에서만 되면 확장프로그램/광고차단이 Supabase를 차단 중일 가능성이 큽니다)';
+        const msg = (raw.includes('타임아웃') || raw.includes('Failed to fetch')) ? (raw + hint) : raw;
+        setLeaderboardMsg(msg, true);
         renderLeaderboardRows([]);
         return;
     }

@@ -11,7 +11,8 @@ function makeTimeoutFetch(timeoutMs = 15000) {
         const controller = new AbortController();
         const t = setTimeout(() => controller.abort(), timeoutMs);
         try {
-            return await fetch(input, { ...init, signal: controller.signal });
+            // 브라우저/중간프록시 캐시 영향 최소화
+            return await fetch(input, { ...init, cache: 'no-store', signal: controller.signal });
         } finally {
             clearTimeout(t);
         }

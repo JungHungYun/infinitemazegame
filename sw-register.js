@@ -16,6 +16,19 @@ async function registerSw() {
     // 매 로드마다 업데이트 체크(기본 24h 대기 문제 회피)
     reg.update().catch(() => {});
 
+    // 업데이트가 이미 대기 중이면 즉시 적용 시도
+    if (reg.waiting) {
+      try { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (_) {}
+    }
+
+    // 새 SW가 활성화되면 자동 새로고침(캐시 잔상 최소화)
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return;
+      reloaded = true;
+      try { location.reload(); } catch (_) {}
+    });
+
     reg.addEventListener('updatefound', () => {
       const installing = reg.installing;
       if (!installing) return;
@@ -23,6 +36,8 @@ async function registerSw() {
         // 기존 컨트롤러가 있는 상태에서 새 SW가 설치 완료면 업데이트 안내
         if (installing.state === 'installed' && navigator.serviceWorker.controller) {
           showUpdateHint();
+          // 대기열에 있는 새 SW를 즉시 활성화 시도
+          try { reg.waiting && reg.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (_) {}
         }
       });
     });
@@ -32,5 +47,6 @@ async function registerSw() {
 }
 
 registerSw();
+
 
 

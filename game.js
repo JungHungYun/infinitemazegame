@@ -1572,6 +1572,11 @@ function handlePointerUp(e) {
     const isTap = !state.input.moved && dist2 <= (12 * 12) && dt <= 250;
     if (!isTap) return;
 
+    // 모바일: 미로에서는 탭=미사일 발사, 월드맵에서는 탭=청크 재진입
+    if (state.mode === 'MAZE') {
+        tryFireMissileFromInventory();
+        return;
+    }
     handleClick(e);
 }
 
