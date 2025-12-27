@@ -169,6 +169,7 @@ const state = {
         maxFloorReached: 1,
         bossKills: 0,
         isMobile: false,
+        abilityNotice: '',
         abilityShownFloors: new Set(), // 이미 선택창을 띄운 층(중복 방지)
         abilityChoices: [],
         boughtAbilities: new Set(),    // 이번 리롤에서 이미 구매한 능력들
@@ -3114,6 +3115,14 @@ function getFloor() {
     return (state.currentChunk?.y ?? 0) + 1;
 }
 
+function ensureAutoAbilitiesForFloor(floor) {
+    // 10층부터 벽부수기 자동 습득
+    if (floor >= 10 && !state.abilities.wallBreakUnlocked) {
+        state.abilities.wallBreakUnlocked = true;
+        state.ui.abilityNotice = '10층 도달: 벽부수기 능력을 자동으로 습득했습니다.';
+    }
+}
+
 /**
  * 특정 층에서의 벽 레벨 분포를 결정합니다.
  * @returns { { baseLevel: number, nextLevel: number, nextProb: number } } 
@@ -3272,6 +3281,7 @@ function exitMaze(dx, dy) {
 
     // 10층마다 어빌리티 선택창(중복 방지) - 선택 후 다음 청크로 진입
     const floor = nextY + 1;
+    ensureAutoAbilitiesForFloor(floor);
     if (floor % 10 === 0 && !state.ui.abilityShownFloors.has(floor)) {
         state.ui.abilityShownFloors.add(floor);
         state.ui.pendingEnter = { x: nextX, y: nextY, entryDir };

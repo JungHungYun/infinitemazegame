@@ -525,6 +525,50 @@ canvas {
     color: #bbb;
 }
 
+.ability-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 800;
+    color: #ddd;
+}
+
+.ability-meta-sep { opacity: 0.65; padding: 0 6px; }
+
+.ability-meta::before {
+    content: '';
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    display: inline-block;
+}
+
+.ability-meta.meta-coin::before {
+    background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.55), rgba(255,210,77,0.85) 45%, rgba(255,160,0,0.85));
+    box-shadow: 0 0 0 1px rgba(255,210,77,0.35);
+}
+
+.ability-meta.meta-floor::before {
+    border-radius: 4px;
+    background: linear-gradient(135deg, rgba(154,209,255,0.85), rgba(0,255,255,0.35));
+    box-shadow: 0 0 0 1px rgba(154,209,255,0.30);
+}
+
+.ability-notice {
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(0,255,255,0.18);
+    background: rgba(0,255,255,0.06);
+    color: #cfefff;
+    font-weight: 800;
+    font-size: 12.5px;
+}
+
+.ability-cost.insufficient {
+    color: #ff9aa2;
+}
+
 .ability-choices {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

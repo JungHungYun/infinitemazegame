@@ -31,15 +31,6 @@ function initAbilityModalUI() {
 
 const ABILITY_DEFS = [
     {
-        id: 'wall_break',
-        name: '벽부수기 능력',
-        desc: '벽을 마찰시키면 달아오르며 부술 수 있습니다.',
-        rarity: 'EPIC',
-        cost: 15,
-        available: () => !state.abilities.wallBreakUnlocked,
-        apply: () => { state.abilities.wallBreakUnlocked = true; },
-    },
-    {
         id: 'wall_break_speed',
         name: '벽부수기 속도 +10%',
         desc: `벽을 더 빠르게 부숩니다. (MAX x${CONFIG.MAX_WALL_BREAK_SPEED_MULT})`,
@@ -325,6 +316,8 @@ const ABILITY_DEFS = [
 
 function openAbilityModal(floor) {
     state.ui.modalOpen = true;
+    // 층이 바뀌면 공지 메시지는 1회만 보여주도록(없으면 빈 문자열)
+    if (!state.ui.abilityNotice) state.ui.abilityNotice = '';
     // 화면은 월드로 두고(정지), 모달만 표시
     state.mode = 'WORLD';
     state.ui.abilityRerollCost = 1; // 층마다 리롤 비용 초기화
@@ -342,6 +335,8 @@ function closeAbilityModal() {
     const modal = document.getElementById('ability-modal');
     if (modal) modal.classList.add('hidden');
     state.ui.modalOpen = false;
+    // 공지는 닫을 때 초기화(다음 상점에서 재사용 방지)
+    state.ui.abilityNotice = '';
 
     // 대기 중인 청크 진입이 있으면 실행
     if (state.ui.pendingEnter) {
@@ -364,7 +359,9 @@ function rollAbilityChoices() {
     const choices = [];
     const used = new Set();
     const slotCount = state.abilities.shopSlots || 3;
-    const isEligible = (a) => a.available() && (typeof a.requires !== 'function' || !!a.requires());
+    // "보여줄 수 있는" 후보: 선행 조건(requires)은 만족하지 않아도 표시하되,
+    // 구매 버튼에서 잠김/사유를 명확히 보여준다.
+    const isEligibleToShow = (a) => a.available();
 
     // 슬롯 개수만큼 뽑기
     for (let slot = 0; slot < slotCount; slot++) {
@@ -383,21 +380,21 @@ function rollAbilityChoices() {
         else if (r < pRare) rarity = 'RARE';
 
         // 해당 희귀도의 가능한 어빌리티 풀 구성
-        let pool = ABILITY_DEFS.filter(a => a.rarity === rarity && isEligible(a) && !used.has(a.id));
+        let pool = ABILITY_DEFS.filter(a => a.rarity === rarity && isEligibleToShow(a) && !used.has(a.id));
 
         // 만약 해당 희귀도에 남은 어빌리티가 없으면 하위 희귀도로 시도
         if (pool.length === 0) {
             const rarities = ['LEGENDARY', 'EPIC', 'RARE', 'COMMON'];
             const curIdx = rarities.indexOf(rarity);
             for (let i = curIdx + 1; i < rarities.length; i++) {
-                pool = ABILITY_DEFS.filter(a => a.rarity === rarities[i] && isEligible(a) && !used.has(a.id));
+                pool = ABILITY_DEFS.filter(a => a.rarity === rarities[i] && isEligibleToShow(a) && !used.has(a.id));
                 if (pool.length > 0) break;
             }
         }
 
         // 여전히 풀이 비어있다면(거의 불가능하지만) 전체 풀에서 가용한 것 중 하나
         if (pool.length === 0) {
-            pool = ABILITY_DEFS.filter(a => isEligible(a) && !used.has(a.id));
+            pool = ABILITY_DEFS.filter(a => isEligibleToShow(a) && !used.has(a.id));
         }
 
         if (pool.length > 0) {
@@ -421,12 +418,18 @@ function renderAbilityModal(floor = getFloor()) {
     if (floorEl) floorEl.textContent = String(floor);
     if (rerollCostEl) rerollCostEl.textContent = String(state.ui.abilityRerollCost);
     if (rerollBtn) rerollBtn.disabled = state.coins < state.ui.abilityRerollCost;
+    if (rerollBtn) {
+        rerollBtn.title = (state.coins < state.ui.abilityRerollCost)
+            ? `코인이 부족합니다. (필요: ${state.ui.abilityRerollCost})`
+            : '';
+    }
 
     if (statusEl) {
         const probs = CONFIG.RARITY_PROBS;
         const bonus = state.abilities.rarityBonus;
         const stats = [
             { label: '이속 보너스', val: `+${((state.abilities.moveSpeedMult - 1) * 100).toFixed(1)}%` },
+            { label: '벽부수기', val: state.abilities.wallBreakUnlocked ? 'ON' : '10층부터 자동' },
             { label: '벽부수기 속도', val: `x${state.abilities.wallBreakSpeedMult.toFixed(2)}` },
             { label: '미사일 확률', val: `x${state.abilities.missileSpawnChanceMult.toFixed(2)}` },
             { label: '기절 보너스', val: `+${(state.abilities.missileStunBonusMs / 1000).toFixed(1)}s` },
@@ -439,7 +442,12 @@ function renderAbilityModal(floor = getFloor()) {
             { label: '상점 슬롯', val: `${state.abilities.shopSlots}개` },
             { label: '확률(일/희/영/전)', val: `${((probs.COMMON+bonus.COMMON)*100).toFixed(0)}/${((probs.RARE+bonus.RARE)*100).toFixed(0)}/${((probs.EPIC+bonus.EPIC)*100).toFixed(0)}/${((probs.LEGENDARY+bonus.LEGENDARY)*100).toFixed(1)}%` },
         ];
-        statusEl.innerHTML = stats.map(s => `<div class="stat-item">${s.label}: <span class="stat-val">${s.val}</span></div>`).join('');
+        const notice = (state.ui?.abilityNotice)
+            ? `<div class="ability-notice">${state.ui.abilityNotice}</div>`
+            : '';
+        statusEl.innerHTML =
+            notice +
+            stats.map(s => `<div class="stat-item">${s.label}: <span class="stat-val">${s.val}</span></div>`).join('');
     }
 
     if (!listEl) return;
@@ -475,6 +483,9 @@ function renderAbilityModal(floor = getFloor()) {
 
         costEl.className = 'ability-cost';
         costEl.textContent = `비용: ${finalCost}`;
+        if (!isBought && !canBuy && meetsReq && state.coins < finalCost) {
+            costEl.classList.add('insufficient');
+        }
 
         const btn = document.createElement('button');
         btn.className = 'btn btn-buy';
@@ -486,10 +497,18 @@ function renderAbilityModal(floor = getFloor()) {
                     ? (def.lockedText || '잠김')
                     : (def.available() ? '코인 부족' : '구매 불가')));
         btn.disabled = !canBuy;
+        btn.title = !canBuy
+            ? (isBought
+                ? ''
+                : (!meetsReq ? (def.lockedText || '잠김')
+                    : (state.coins < finalCost ? `코인 부족 (필요: ${finalCost})`
+                        : (def.available() ? '구매 불가' : '최대/비활성'))))
+            : '';
         btn.addEventListener('click', () => {
             if (!state.ui.modalOpen) return;
             if (state.coins < finalCost) return;
             if (!def.available() || state.ui.boughtAbilities.has(id)) return;
+            if ((typeof def.requires === 'function') && !def.requires()) return;
 
             state.coins -= finalCost;
             state.abilities.boughtCountByRarity[def.rarity]++;
