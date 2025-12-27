@@ -15,7 +15,6 @@ const state = {
         // 미로 좌표계는 "타일 단위 연속좌표"로 통일합니다.
         // 타일 (i, j)의 중심은 (i + 0.5, j + 0.5)
         mazePos: { x: 8.5, y: 16.5 }, // S 출구(아래쪽)에서 시작
-        isZPressed: false,
         lives: 3,
         invincibleUntilMs: 0, // 플레이어 무적 시간
         shieldCharges: 0, // 실드 잔량(피격 1회 무효)
@@ -1423,11 +1422,6 @@ function handleKeyDown(e) {
         // 모달이 열려있으면 게임 입력 차단
         return;
     }
-    if (e.key.toLowerCase() === 'z') {
-        state.player.isZPressed = !state.player.isZPressed;
-        updateUI();
-    }
-
     // 미사일 발사
     if (e.key.toLowerCase() === 'x') {
         // 키를 누르고 있는 동안 반복 발사되는 것 방지
@@ -1499,16 +1493,15 @@ function handleClick(e) {
 function updateUI() {
     const statusEl = document.getElementById('status');
     if (!statusEl) return; // 좌상단 범례(UI 오버레이)를 제거한 경우
-    const ctrlStatus = state.player.isZPressed ? '<span style="color: #00ff00;">조작 활성화 (Z)</span>' : '<span style="color: #ff4444;">조작 대기 (Z)</span>';
     if (state.mode === 'WORLD') {
-        statusEl.innerHTML = `상태: 월드 맵 | ${ctrlStatus}`;
+        statusEl.innerHTML = `상태: 월드 맵`;
     } else {
         const chaserOn = state.chaser.active ? '<span style="color:#ff5555;">ON</span>' : '<span style="color:#888;">OFF</span>';
         const inbound = (state.chaser.active && !state.chaser.isPresentInMaze) ? ' · <span style="color:#9ad1ff;">INBOUND</span>' : '';
         const stunned = (state.chaser.active && state.nowMs < state.chaser.stunUntilMs) ? ' · <span style="color:#ffd24d;">STUN</span>' : '';
         const speed = state.chaser.active ? (CONFIG.CHASER_SPEED * state.chaser.speedMult).toFixed(2) : '-';
         statusEl.innerHTML =
-            `상태: 미로 (${state.currentChunk.x}, ${state.currentChunk.y}) | ${ctrlStatus}` +
+            `상태: 미로 (${state.currentChunk.x}, ${state.currentChunk.y})` +
             `<br/>추격자: ${chaserOn}${inbound}${stunned} · 속도: ${speed} · 잡힘: ${state.chaser.caughtCount}` +
             `<br/>인벤토리: 미사일 <span style="color:#ffd24d;">${state.inventory.missiles}</span> (X로 발사)`;
     }
@@ -2163,8 +2156,6 @@ function updateWorld(dt) {
 }
 
 function updateMaze(dt) {
-    if (!state.player.isZPressed) return;
-
     const cellSize = Math.min(state.view.w, state.view.h) / CONFIG.MAZE_SIZE * 0.9;
     const offsetX = state.view.w / 2 - (cellSize * CONFIG.MAZE_SIZE) / 2;
     const offsetY = state.view.h / 2 - (cellSize * CONFIG.MAZE_SIZE) / 2;
@@ -3314,7 +3305,7 @@ function drawWorld(cameraY = state.cameraY, opts = {}) {
         
         // 마우스 가이드 라인 (조작 활성화 시)
         // 오버레이(탭 맵)에서는 인게임 가이드 라인을 그리지 않음
-        if (showMouseLine && state.player.isZPressed) {
+        if (showMouseLine) {
             ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
             ctx.setLineDash([5, 5]);
             ctx.beginPath();
@@ -3614,18 +3605,16 @@ function drawMaze() {
         ctx.restore();
     }
 
-    // 마우스 가이드 라인 (조작 활성화 시) - 플레이어 위치 기준
-    if (state.player.isZPressed) {
-        const pGuideX = offsetX + state.player.mazePos.x * cellSize;
-        const pGuideY = offsetY + state.player.mazePos.y * cellSize;
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.25)';
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(pGuideX, pGuideY);
-        ctx.lineTo(state.mouse.x, state.mouse.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-    }
+    // 마우스 가이드 라인 - 플레이어 위치 기준
+    const pGuideX = offsetX + state.player.mazePos.x * cellSize;
+    const pGuideY = offsetY + state.player.mazePos.y * cellSize;
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.25)';
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(pGuideX, pGuideY);
+    ctx.lineTo(state.mouse.x, state.mouse.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
     // 플레이어 (미로 내부)
     const pScreenX = offsetX + state.player.mazePos.x * cellSize;
