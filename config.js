@@ -13,7 +13,7 @@ const CONFIG = {
     CHASER_START_ROW_Y: 2, // 3번째 행(y=2)부터 추격자 활성/스폰
     // 추격자(몹) 설정
     CHASER_SPEED: 2.0, // 셀/초 (기본)
-    CHASER_RADIUS: 0.33, // 셀 단위 반지름
+    CHASER_RADIUS: 0.495, // 셀 단위 반지름 (1.5배 증가: 0.33 * 1.5)
     CHASER_REPATH_MS: 250,
     CHASER_GRACE_MS: 650, // 리셋 직후 유예 시간
     CHASER_ENTRY_DELAY_MS: 1000, // 청크 진입 후 추격자가 "등장"하기까지 딜레이
