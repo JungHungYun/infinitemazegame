@@ -64,7 +64,9 @@ alter table public.profiles
   add constraint profiles_username_nonempty check (length(trim(username)) > 0);
 
 -- ===== 2) 랭킹 뷰 (1인 1기록 기반) =====
-create or replace view public.leaderboard_view as
+-- NOTE: create or replace view는 컬럼 개수/순서 변경이 불가하므로(drop 후 재생성)
+drop view if exists public.leaderboard_view;
+create view public.leaderboard_view as
 select
   rank() over (
     order by lb.score desc, lb.floor desc, lb.updated_at asc
