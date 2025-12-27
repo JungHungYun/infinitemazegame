@@ -1349,7 +1349,7 @@ function init() {
         window.addEventListener('pointerup', handlePointerUp, { passive: false });
     } else {
         // PC: 기존처럼 클릭으로 월드맵 진입
-        canvas.addEventListener('click', handleClick);
+    canvas.addEventListener('click', handleClick);
     }
     initHudUI();
     initAbilityModalUI();
@@ -1378,7 +1378,7 @@ function loadControlPrefs() {
         const savedMode = localStorage.getItem('maze_mobile_mode');
         if (savedMode === 'touch' || savedMode === 'gyro') {
             state.controls.mobileMode = savedMode;
-        }
+}
         const nb = Number(localStorage.getItem('maze_gyro_neutral_beta'));
         const ng = Number(localStorage.getItem('maze_gyro_neutral_gamma'));
         if (Number.isFinite(nb) && Number.isFinite(ng)) {
@@ -1395,7 +1395,7 @@ function saveControlPrefs() {
         if (state.controls.gyro.hasNeutral) {
             localStorage.setItem('maze_gyro_neutral_beta', String(state.controls.gyro.neutralBeta));
             localStorage.setItem('maze_gyro_neutral_gamma', String(state.controls.gyro.neutralGamma));
-        }
+}
     } catch (_) {}
 }
 
@@ -1423,7 +1423,7 @@ async function enableGyroControls() {
         g.hasNeutral = true;
     }
     saveControlPrefs();
-}
+            }
 
 function disableGyroControls() {
     state.controls.gyro.enabled = false;
@@ -1471,7 +1471,7 @@ function initHudUI() {
             unlockAudioOnce();
             tryFireMissileFromInventory();
         });
-    }
+        }
 }
 
 function initTitleScreenUI() {
@@ -1493,7 +1493,7 @@ function initTitleScreenUI() {
         state.ui.maxFloorReached = Math.max(1, getFloor());
         state.ui.bossKills = Math.max(0, Math.floor(state.ui.bossKills ?? 0));
         closeGameOverModal();
-        updateUI();
+            updateUI();
         // 첫 입력 이후 BGM 시작
         playNextBgmTrack();
     };
@@ -1638,8 +1638,17 @@ function handlePointerDown(e) {
 }
 
 function handlePointerMove(e) {
+    // IMPORTANT:
+    // 모바일에서 window-level pointermove에서 preventDefault를 걸어버리면
+    // 설정 UI(셀렉트/슬라이더 등)까지 기본 동작이 막힐 수 있음.
+    // -> 캔버스 위(=게임 조작)에서만 처리하고, UI 상호작용은 그대로 둔다.
+    const onCanvas = (e.target === canvas);
+    if (!onCanvas && !state.input.pointerDown) return;
+    if (!state.ui.started) return;
+    if (state.ui.settingsOpen || state.ui.modalOpen || state.ui.gameOverOpen) return;
+
     // 터치에서도 마우스 좌표 업데이트(모바일 조작 핵심)
-    if (state.ui.isMobile && e.cancelable) {
+    if (state.ui.isMobile && onCanvas && e.cancelable) {
         // 화면 스크롤 방지(게임 조작 우선)
         try { e.preventDefault(); } catch (_) {}
     }
@@ -2413,7 +2422,7 @@ function updateMaze(dt) {
 
     const pScreenX = offsetX + state.player.mazePos.x * cellSize;
     const pScreenY = offsetY + state.player.mazePos.y * cellSize;
-
+    
     let dx, dy;
     // 모바일 + 자이로 모드면 "기울기 → 가상 마우스 오프셋"으로 이동 입력을 만듦
     if (state.ui.isMobile && state.controls?.mobileMode === 'gyro' && state.controls.gyro?.enabled) {
@@ -3873,15 +3882,15 @@ function drawMaze() {
     }
 
     // 마우스 가이드 라인 - 플레이어 위치 기준
-    const pGuideX = offsetX + state.player.mazePos.x * cellSize;
-    const pGuideY = offsetY + state.player.mazePos.y * cellSize;
-    ctx.strokeStyle = 'rgba(0, 255, 255, 0.25)';
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.moveTo(pGuideX, pGuideY);
-    ctx.lineTo(state.mouse.x, state.mouse.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
+        const pGuideX = offsetX + state.player.mazePos.x * cellSize;
+        const pGuideY = offsetY + state.player.mazePos.y * cellSize;
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.25)';
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(pGuideX, pGuideY);
+        ctx.lineTo(state.mouse.x, state.mouse.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
 
     // 플레이어 (미로 내부)
     const pScreenX = offsetX + state.player.mazePos.x * cellSize;

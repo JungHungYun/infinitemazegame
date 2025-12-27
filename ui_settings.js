@@ -22,8 +22,8 @@ function initSettingsModalUI() {
         sfxVal.textContent = `${sfxPct}%`;
         bgmVal.textContent = `${bgmPct}%`;
 
-        // 모바일에서만 조작 방식 노출
-        const isMobile = !!state.ui.isMobile;
+        // 모바일(터치 기기)에서만 조작 방식 노출
+        const isMobile = !!state.ui.isMobile || ((navigator.maxTouchPoints || 0) > 0);
         if (controlRow) controlRow.classList.toggle('hidden', !isMobile);
         if (controlMsg) controlMsg.classList.toggle('hidden', !isMobile);
         if (controlMode && isMobile) {
