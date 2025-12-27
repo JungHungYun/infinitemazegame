@@ -32,6 +32,13 @@ function getSupabaseClient() {
         global: {
             fetch: makeTimeoutFetch(15000),
         },
+        auth: {
+            // 새로고침/재방문에도 로그인 세션 유지
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true,
+            storage: window.localStorage,
+        },
     });
 }
 

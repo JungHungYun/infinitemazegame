@@ -1715,6 +1715,20 @@ function restartRun() {
 // 외부(UI)에서도 호출할 수 있게 노출
 window.restartRun = restartRun;
 
+// 게임오버 후 메인(타이틀) 화면으로 복귀: 세션 유지 + 새로고침 없이 런만 초기화
+function goToTitleScreen() {
+    // 런 상태 리셋(세션/설정 유지)
+    restartRun();
+    // 타이틀 표시
+    const title = document.getElementById('title-screen');
+    if (title) title.classList.remove('hidden');
+    state.ui.started = false;
+    // 리더보드 갱신(로그인 세션은 유지)
+    try { if (typeof window.leaderboardRefresh === 'function') window.leaderboardRefresh(); } catch (_) {}
+}
+
+window.goToTitleScreen = goToTitleScreen;
+
 // 어빌리티(상점) UI는 `ui_ability.js`로 분리되었습니다.
 
 function resize() {
@@ -1769,7 +1783,7 @@ function handleKeyDown(e) {
         const k = (e.key || '').toLowerCase();
         if (k === 'enter' || k === 'r') {
             e.preventDefault();
-            if (typeof window.restartRun === 'function') window.restartRun();
+            if (typeof window.goToTitleScreen === 'function') window.goToTitleScreen();
             else window.location.reload();
         }
         return;

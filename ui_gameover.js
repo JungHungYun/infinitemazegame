@@ -9,7 +9,8 @@ function initGameOverUI() {
 
     restartBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        if (typeof window.restartRun === 'function') window.restartRun();
+        if (typeof window.goToTitleScreen === 'function') window.goToTitleScreen();
+        else if (typeof window.restartRun === 'function') window.restartRun();
         else window.location.reload();
     });
 }
@@ -85,6 +86,11 @@ function openGameOverModal() {
                 if (hint) hint.textContent = `점수 업로드 실패: ${String(e?.message || e)}`;
             });
     }
+
+    // 게임오버 후 메인(타이틀) 화면으로 자동 복귀
+    setTimeout(() => {
+        if (typeof window.goToTitleScreen === 'function') window.goToTitleScreen();
+    }, 2000);
 }
 
 
