@@ -7,6 +7,10 @@ function initSettingsModalUI() {
     const bgmSlider = document.getElementById('settings-bgm');
     const sfxVal = document.getElementById('settings-sfx-val');
     const bgmVal = document.getElementById('settings-bgm-val');
+    const controlRow = document.getElementById('settings-control-row');
+    const controlMode = document.getElementById('settings-control-mode');
+    const gyroCal = document.getElementById('settings-gyro-calibrate');
+    const controlMsg = document.getElementById('settings-control-msg');
 
     if (!modal || !closeBtn || !sfxSlider || !bgmSlider || !sfxVal || !bgmVal) return;
 
@@ -17,6 +21,23 @@ function initSettingsModalUI() {
         bgmSlider.value = String(bgmPct);
         sfxVal.textContent = `${sfxPct}%`;
         bgmVal.textContent = `${bgmPct}%`;
+
+        // 모바일에서만 조작 방식 노출
+        const isMobile = !!state.ui.isMobile;
+        if (controlRow) controlRow.classList.toggle('hidden', !isMobile);
+        if (controlMsg) controlMsg.classList.toggle('hidden', !isMobile);
+        if (controlMode && isMobile) {
+            controlMode.value = String(state.controls?.mobileMode || 'touch');
+        }
+        if (gyroCal) gyroCal.classList.toggle('hidden', !(isMobile && (state.controls?.mobileMode === 'gyro')));
+
+        if (controlMsg && isMobile) {
+            if (state.controls?.mobileMode === 'gyro') {
+                controlMsg.textContent = '자이로 모드: 기기를 기울여 이동합니다. iOS는 처음 1회 권한 허용이 필요할 수 있어요.';
+            } else {
+                controlMsg.textContent = '';
+            }
+        }
     };
 
     const setSfx = (pct) => {
@@ -35,6 +56,46 @@ function initSettingsModalUI() {
     bgmSlider.addEventListener('input', () => setBgm(Number(bgmSlider.value)));
 
     closeBtn.addEventListener('click', () => closeSettingsModal());
+
+    if (controlMode) {
+        controlMode.addEventListener('change', async () => {
+            const next = String(controlMode.value || 'touch');
+            if (!state.controls) state.controls = { mobileMode: 'touch', gyro: { enabled: false } };
+            if (next === 'gyro') {
+                try {
+                    state.controls.mobileMode = 'gyro';
+                    if (typeof window.enableGyroControls === 'function') {
+                        await window.enableGyroControls();
+                    } else if (typeof enableGyroControls === 'function') {
+                        await enableGyroControls();
+                    } else {
+                        throw new Error('자이로 초기화 함수가 없습니다.');
+                    }
+                } catch (e) {
+                    // 실패 시 터치로 롤백
+                    state.controls.mobileMode = 'touch';
+                    try { if (typeof disableGyroControls === 'function') disableGyroControls(); } catch (_) {}
+                    if (controlMsg) controlMsg.textContent = `자이로 활성화 실패: ${String(e?.message || e)}`;
+                }
+            } else {
+                state.controls.mobileMode = 'touch';
+                try { if (typeof disableGyroControls === 'function') disableGyroControls(); } catch (_) {}
+            }
+            render();
+        });
+    }
+
+    if (gyroCal) {
+        gyroCal.addEventListener('click', () => {
+            try {
+                if (typeof calibrateGyroNeutral === 'function') calibrateGyroNeutral();
+                if (controlMsg) controlMsg.textContent = '중립값을 저장했습니다.';
+            } catch (e) {
+                if (controlMsg) controlMsg.textContent = `중립 설정 실패: ${String(e?.message || e)}`;
+            }
+            render();
+        });
+    }
 
     render();
 }

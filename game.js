@@ -27,6 +27,23 @@ const state = {
         startMs: 0,
         moved: false,
     },
+    controls: {
+        // 모바일 조작 모드: 'touch' | 'gyro'
+        mobileMode: 'touch',
+        gyro: {
+            enabled: false,
+            alpha: 0,
+            beta: 0,
+            gamma: 0,
+            neutralBeta: 0,
+            neutralGamma: 0,
+            hasNeutral: false,
+            tiltMaxDeg: 25,   // 이 이상 기울이면 입력 100%로 클램프
+            radiusPx: 170,    // 가상 마우스 오프셋(픽셀)
+            sensitivity: 1.0, // 0.5~2.0 정도
+            listenerAttached: false,
+        },
+    },
     boss: {
         active: false,
         hp: 0,
@@ -1323,6 +1340,7 @@ function init() {
 
     // 메인 화면에서 디바이스 판별 후, 입력/UI를 분기
     state.ui.isMobile = detectIsMobile();
+    loadControlPrefs();
 
     if (state.ui.isMobile) {
         // 모바일: 드래그(조작) + 탭(월드맵 진입) 을 위해 pointer 사용
@@ -1353,6 +1371,80 @@ function init() {
     state.cameraY = state.player.worldPos.y * CONFIG.CHUNK_SIZE - state.view.h * 0.7;
     
     requestAnimationFrame(gameLoop);
+}
+
+function loadControlPrefs() {
+    try {
+        const savedMode = localStorage.getItem('maze_mobile_mode');
+        if (savedMode === 'touch' || savedMode === 'gyro') {
+            state.controls.mobileMode = savedMode;
+        }
+        const nb = Number(localStorage.getItem('maze_gyro_neutral_beta'));
+        const ng = Number(localStorage.getItem('maze_gyro_neutral_gamma'));
+        if (Number.isFinite(nb) && Number.isFinite(ng)) {
+            state.controls.gyro.neutralBeta = nb;
+            state.controls.gyro.neutralGamma = ng;
+            state.controls.gyro.hasNeutral = true;
+        }
+    } catch (_) {}
+}
+
+function saveControlPrefs() {
+    try {
+        localStorage.setItem('maze_mobile_mode', state.controls.mobileMode);
+        if (state.controls.gyro.hasNeutral) {
+            localStorage.setItem('maze_gyro_neutral_beta', String(state.controls.gyro.neutralBeta));
+            localStorage.setItem('maze_gyro_neutral_gamma', String(state.controls.gyro.neutralGamma));
+        }
+    } catch (_) {}
+}
+
+async function enableGyroControls() {
+    // 지원 여부 체크 + (iOS) 권한 요청
+    if (typeof DeviceOrientationEvent === 'undefined') {
+        throw new Error('이 기기는 자이로(DeviceOrientation)를 지원하지 않습니다.');
+    }
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== 'granted') throw new Error('자이로 권한이 거부되었습니다.');
+    }
+
+    const g = state.controls.gyro;
+    if (!g.listenerAttached) {
+        window.addEventListener('deviceorientation', onDeviceOrientation, { passive: true });
+        g.listenerAttached = true;
+    }
+    g.enabled = true;
+
+    // 첫 활성화인데 캘리브레이션 값이 없으면 현재 값으로 중립값 설정
+    if (!g.hasNeutral) {
+        g.neutralBeta = g.beta || 0;
+        g.neutralGamma = g.gamma || 0;
+        g.hasNeutral = true;
+    }
+    saveControlPrefs();
+}
+
+function disableGyroControls() {
+    state.controls.gyro.enabled = false;
+    saveControlPrefs();
+}
+
+function calibrateGyroNeutral() {
+    const g = state.controls.gyro;
+    g.neutralBeta = g.beta || 0;
+    g.neutralGamma = g.gamma || 0;
+    g.hasNeutral = true;
+    saveControlPrefs();
+}
+
+function onDeviceOrientation(e) {
+    const g = state.controls.gyro;
+    if (!g) return;
+    // 숫자만 반영(브라우저에 따라 null 가능)
+    if (typeof e.alpha === 'number') g.alpha = e.alpha;
+    if (typeof e.beta === 'number') g.beta = e.beta;
+    if (typeof e.gamma === 'number') g.gamma = e.gamma;
 }
 
 function initHudUI() {
@@ -2312,10 +2404,26 @@ function updateMaze(dt) {
 
     const pScreenX = offsetX + state.player.mazePos.x * cellSize;
     const pScreenY = offsetY + state.player.mazePos.y * cellSize;
-    
-    const dx = state.mouse.x - pScreenX;
-    const dy = state.mouse.y - pScreenY;
-    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    let dx, dy;
+    // 모바일 + 자이로 모드면 "기울기 → 가상 마우스 오프셋"으로 이동 입력을 만듦
+    if (state.ui.isMobile && state.controls?.mobileMode === 'gyro' && state.controls.gyro?.enabled) {
+        const g = state.controls.gyro;
+        const beta = (g.beta || 0) - (g.hasNeutral ? (g.neutralBeta || 0) : 0);
+        const gamma = (g.gamma || 0) - (g.hasNeutral ? (g.neutralGamma || 0) : 0);
+        const tiltMax = Math.max(5, Number(g.tiltMaxDeg || 25));
+        const sens = Math.max(0.2, Math.min(3.0, Number(g.sensitivity || 1.0)));
+        const radius = Math.max(60, Math.min(320, Number(g.radiusPx || 170)));
+        const nx = Math.max(-1, Math.min(1, (gamma / tiltMax) * sens));
+        const ny = Math.max(-1, Math.min(1, (beta / tiltMax) * sens));
+        dx = nx * radius;
+        dy = ny * radius;
+    } else {
+        dx = state.mouse.x - pScreenX;
+        dy = state.mouse.y - pScreenY;
+    }
+
+    const dist = Math.sqrt(dx * dx + dy * dy);
     
     if (dist > 10) {
         const moveScale = Math.min(dist / 100, 1.0);
