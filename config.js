@@ -79,7 +79,7 @@ const CONFIG = {
         LEGENDARY: 0.01
     },
 
-    DEBUG: false, // 디버그 모드 (true 설정 시 벽부수기 해제, 코인/미사일 1000개 시작)
+    DEBUG: true,  // 디버그 모드 (true 설정 시 벽부수기 해제, 코인/미사일 1000개 시작
 };
 
 
