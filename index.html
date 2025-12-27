@@ -8,7 +8,7 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <link rel="stylesheet" href="style.css?v=20251227_10">
+    <link rel="stylesheet" href="style.css?v=20251227_11">
 </head>
 <body>
     <div id="game-container">
@@ -120,11 +120,13 @@
 
             <div id="settings-control-row" class="settings-row">
                 <div class="settings-label">조작</div>
-                <select id="settings-control-mode" class="input">
-                    <option value="touch">터치</option>
-                    <option value="gyro">자이로</option>
-                </select>
-                <button id="settings-gyro-calibrate" class="btn btn-secondary" type="button">중립 설정</button>
+                <div class="settings-control">
+                    <div class="segmented" role="group" aria-label="모바일 조작 방식">
+                        <button id="settings-control-touch" class="seg-btn" type="button">터치</button>
+                        <button id="settings-control-gyro" class="seg-btn" type="button">자이로</button>
+                    </div>
+                    <button id="settings-gyro-calibrate" class="btn btn-secondary" type="button">중립 설정</button>
+                </div>
             </div>
             <div id="settings-control-msg" class="settings-sub"></div>
 
@@ -155,19 +157,19 @@
     </div>
 
     <!-- Service Worker: 캐시 꼬임 근본 완화(네트워크 우선 + 업데이트 감지) -->
-    <script src="sw-register.js?v=20251227_6"></script>
+    <script src="sw-register.js?v=20251227_7"></script>
 
     <!-- 캐시 강제 갱신을 위한 버전 파라미터 -->
-    <script src="config.js?v=20251227_10"></script>
+    <script src="config.js?v=20251227_11"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabaseClient.js?v=20251227_10"></script>
-    <script src="ui_auth.js?v=20251227_10"></script>
-    <script src="ui_leaderboard.js?v=20251227_10"></script>
-    <script src="ui_gameover.js?v=20251227_10"></script>
-    <script src="audio.js?v=20251227_10"></script>
-    <script src="ui_settings.js?v=20251227_10"></script>
-    <script src="ui_ability.js?v=20251227_10"></script>
-    <script src="game.js?v=20251227_10"></script>
+    <script src="supabaseClient.js?v=20251227_11"></script>
+    <script src="ui_auth.js?v=20251227_11"></script>
+    <script src="ui_leaderboard.js?v=20251227_11"></script>
+    <script src="ui_gameover.js?v=20251227_11"></script>
+    <script src="audio.js?v=20251227_11"></script>
+    <script src="ui_settings.js?v=20251227_11"></script>
+    <script src="ui_ability.js?v=20251227_11"></script>
+    <script src="game.js?v=20251227_11"></script>
     <script>
         // 리더보드가 "불러오는 중..."에서 멈출 때 원인 파악용 안전장치
         // (ui_leaderboard.js가 404/문법 오류 등으로 로드 실패하면 여기서 메시지를 띄움)

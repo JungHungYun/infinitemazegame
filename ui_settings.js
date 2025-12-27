@@ -8,7 +8,8 @@ function initSettingsModalUI() {
     const sfxVal = document.getElementById('settings-sfx-val');
     const bgmVal = document.getElementById('settings-bgm-val');
     const controlRow = document.getElementById('settings-control-row');
-    const controlMode = document.getElementById('settings-control-mode');
+    const touchBtn = document.getElementById('settings-control-touch');
+    const gyroBtn = document.getElementById('settings-control-gyro');
     const gyroCal = document.getElementById('settings-gyro-calibrate');
     const controlMsg = document.getElementById('settings-control-msg');
 
@@ -26,9 +27,9 @@ function initSettingsModalUI() {
         const isMobile = !!state.ui.isMobile || ((navigator.maxTouchPoints || 0) > 0);
         if (controlRow) controlRow.classList.toggle('hidden', !isMobile);
         if (controlMsg) controlMsg.classList.toggle('hidden', !isMobile);
-        if (controlMode && isMobile) {
-            controlMode.value = String(state.controls?.mobileMode || 'touch');
-        }
+        const mode = String(state.controls?.mobileMode || 'touch');
+        if (touchBtn) touchBtn.classList.toggle('active', mode === 'touch');
+        if (gyroBtn) gyroBtn.classList.toggle('active', mode === 'gyro');
         if (gyroCal) gyroCal.classList.toggle('hidden', !(isMobile && (state.controls?.mobileMode === 'gyro')));
 
         if (controlMsg && isMobile) {
@@ -57,33 +58,33 @@ function initSettingsModalUI() {
 
     closeBtn.addEventListener('click', () => closeSettingsModal());
 
-    if (controlMode) {
-        controlMode.addEventListener('change', async () => {
-            const next = String(controlMode.value || 'touch');
-            if (!state.controls) state.controls = { mobileMode: 'touch', gyro: { enabled: false } };
-            if (next === 'gyro') {
-                try {
-                    state.controls.mobileMode = 'gyro';
-                    if (typeof window.enableGyroControls === 'function') {
-                        await window.enableGyroControls();
-                    } else if (typeof enableGyroControls === 'function') {
-                        await enableGyroControls();
-                    } else {
-                        throw new Error('자이로 초기화 함수가 없습니다.');
-                    }
-                } catch (e) {
-                    // 실패 시 터치로 롤백
-                    state.controls.mobileMode = 'touch';
-                    try { if (typeof disableGyroControls === 'function') disableGyroControls(); } catch (_) {}
-                    if (controlMsg) controlMsg.textContent = `자이로 활성화 실패: ${String(e?.message || e)}`;
+    async function setMobileMode(next) {
+        if (!state.controls) state.controls = { mobileMode: 'touch', gyro: { enabled: false } };
+        if (next === 'gyro') {
+            try {
+                state.controls.mobileMode = 'gyro';
+                if (typeof window.enableGyroControls === 'function') {
+                    await window.enableGyroControls();
+                } else if (typeof enableGyroControls === 'function') {
+                    await enableGyroControls();
+                } else {
+                    throw new Error('자이로 초기화 함수가 없습니다.');
                 }
-            } else {
+            } catch (e) {
+                // 실패 시 터치로 롤백
                 state.controls.mobileMode = 'touch';
                 try { if (typeof disableGyroControls === 'function') disableGyroControls(); } catch (_) {}
+                if (controlMsg) controlMsg.textContent = `자이로 활성화 실패: ${String(e?.message || e)}`;
             }
-            render();
-        });
+        } else {
+            state.controls.mobileMode = 'touch';
+            try { if (typeof disableGyroControls === 'function') disableGyroControls(); } catch (_) {}
+        }
+        render();
     }
+
+    if (touchBtn) touchBtn.addEventListener('click', () => setMobileMode('touch'));
+    if (gyroBtn) gyroBtn.addEventListener('click', () => setMobileMode('gyro'));
 
     if (gyroCal) {
         gyroCal.addEventListener('click', () => {

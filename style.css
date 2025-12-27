@@ -357,6 +357,44 @@ canvas {
     padding: 12px 0;
 }
 
+#settings-control-row {
+    grid-template-columns: 84px 1fr;
+    align-items: start;
+}
+
+.settings-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.segmented {
+    display: inline-flex;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.22);
+    overflow: hidden;
+}
+
+.seg-btn {
+    border: 0;
+    background: transparent;
+    color: #cfcfcf;
+    padding: 10px 14px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.seg-btn.active {
+    color: #fff;
+    background: rgba(0,255,255,0.16);
+}
+
+.seg-btn:focus {
+    outline: none;
+}
+
 .settings-label {
     color: #ddd;
     font-weight: 700;
