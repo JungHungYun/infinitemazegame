@@ -123,7 +123,7 @@ async function leaderboardRefresh() {
     try {
         const root = document.getElementById('leaderboard');
         if (root) {
-            root.innerHTML = '<div class="lb-row muted">리더보드 로딩중... (v20251227_3)</div>';
+            root.innerHTML = '<div class="lb-row muted">리더보드 로딩중... (v20251227_4)</div>';
         }
     } catch (_) {}
 
@@ -136,7 +136,7 @@ async function leaderboardRefresh() {
             .select('rank,user_id,score,floor,display_name,updated_at')
             .order('rank', { ascending: true })
             .limit(10),
-        8000,
+        20000,
         'leaderboard_view 조회'
     );
 
@@ -164,7 +164,7 @@ async function leaderboardRefresh() {
                 .select('rank,user_id,score,floor,display_name,updated_at')
                 .eq('user_id', myId)
                 .maybeSingle(),
-            8000,
+            20000,
             '내 순위 조회'
         );
 
@@ -192,7 +192,7 @@ async function leaderboardRefresh() {
             .from('leaderboard_best')
             .select('user_id,score,floor,updated_at')
             .limit(500),
-        8000,
+        20000,
         'leaderboard_best 조회'
     );
     if (bestErr) {
