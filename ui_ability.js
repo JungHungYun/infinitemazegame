@@ -11,22 +11,10 @@ function initAbilityModalUI() {
 
     rerollBtn.addEventListener('click', () => {
         if (!state.ui.modalOpen) return;
-        const freeLeft = Math.max(0, Math.floor(state.ui.freeRerollsLeft ?? 0));
         const cost = state.ui.abilityRerollCost;
-        // 무료 티켓이 있으면 코인 소모 없이 리롤(리롤 비용은 "올랐다가" 무료 소진 후 원복)
-        if (freeLeft > 0) {
-            state.ui.freeRerollsLeft = freeLeft - 1;
-            state.ui.abilityRerollCost += 1; // 리롤할 때마다 비용 증가(무료도 동일하게 증가시키되)
-            if ((state.ui.freeRerollsLeft ?? 0) <= 0) {
-                // 무료 소진 후 구매 직전 비용으로 복구
-                const restore = Math.max(1, Math.floor(state.ui.freeRerollRestoreCost ?? state.ui.abilityRerollCost));
-                state.ui.abilityRerollCost = restore;
-            }
-        } else {
-            if (state.coins < cost) return;
-            state.coins -= cost;
-            state.ui.abilityRerollCost += 1; // 리롤할 때마다 비용 증가
-        }
+        if (state.coins < cost) return;
+        state.coins -= cost;
+        state.ui.abilityRerollCost += 1; // 리롤할 때마다 비용 증가
         state.ui.boughtAbilities.clear(); // 리롤하면 다시 구매 가능
         rollAbilityChoices();
 
@@ -42,92 +30,6 @@ function initAbilityModalUI() {
 }
 
 const ABILITY_DEFS = [
-    // ===== 금융 어빌리티(추가 비용 상승 없음) =====
-    {
-        id: 'bank_deposit',
-        name: '예금',
-        desc: '10초에 한번 1코인 획득. 획득할 때마다 -0.25초(최대 -9초, 최소 1초).',
-        rarity: 'RARE',
-        cost: 5,
-        noExtraCost: true,
-        available: () => !state.abilities.bankDeposit?.enabled,
-        apply: () => {
-            state.abilities.bankDeposit = { enabled: true, intervalMs: 10000, timerMs: 0 };
-        },
-    },
-    {
-        id: 'bank_saving',
-        name: '적금',
-        desc: '다섯개 층 통과할 때마다 이자 10코인. 획득할 때마다 필요 층수 -1(최소 1층).',
-        rarity: 'EPIC',
-        cost: 20,
-        noExtraCost: true,
-        available: () => !state.abilities.bankSaving?.enabled,
-        apply: () => {
-            state.abilities.bankSaving = { enabled: true, targetFloors: 5, progress: 0 };
-        },
-    },
-    {
-        id: 'living_loan',
-        name: '생활비 대출',
-        desc: '즉시 +20코인. 5개 층 통과 이후 5초당 1코인 상환. 코인이 음수면 1초당 추가 상환액 +1 증가.',
-        rarity: 'EPIC',
-        cost: -20, // 보너스(코인 지급)
-        noExtraCost: true,
-        available: () => true,
-        apply: () => {
-            if (!state.abilities.livingLoan) state.abilities.livingLoan = { debt: 0, graceFloors: 0, repayAccMs: 0, penaltyAccMs: 0, penaltyPayAccMs: 0, penaltyRate: 0 };
-            state.abilities.livingLoan.debt = (state.abilities.livingLoan.debt || 0) + 20;
-            state.abilities.livingLoan.graceFloors = Math.max(state.abilities.livingLoan.graceFloors || 0, 5);
-        },
-    },
-    {
-        id: 'life_loan',
-        name: '생명담보대출',
-        desc: '즉시 +50코인. 목숨 2개 즉시 소모. 목숨이 0 이하가 되면 게임 오버.',
-        rarity: 'EPIC',
-        cost: -50, // 보너스(코인 지급)
-        noExtraCost: true,
-        available: () => true,
-        apply: () => {
-            state.player.lives = (state.player.lives || 0) - 2;
-            if (state.player.lives <= 0) {
-                state.player.lives = 0;
-                if (typeof openGameOverModal === 'function') openGameOverModal();
-            }
-            if (typeof updateUI === 'function') updateUI();
-        },
-    },
-    {
-        id: 'small_luck',
-        name: '작은 행운',
-        desc: '즉시 +5코인.',
-        rarity: 'COMMON',
-        cost: -5, // 보너스(코인 지급)
-        noExtraCost: true,
-        available: () => true,
-        apply: () => {},
-    },
-    {
-        id: 'free_ticket',
-        name: '무료 티켓',
-        desc: '리롤 비용을 3회 무료로 만듭니다. 무료 소진 후엔 구매 직전 리롤 비용으로 되돌립니다.',
-        rarity: 'COMMON',
-        cost: 3,
-        noExtraCost: true,
-        available: () => true,
-        apply: () => {
-            const add = 3;
-            state.ui.freeRerollsLeft = (state.ui.freeRerollsLeft || 0) + add;
-            // 기존 티켓이 없다면 "구매 직전" 비용을 기록(이미 티켓이 있으면 더 이른 비용을 유지)
-            const cur = Math.max(1, Math.floor(state.ui.abilityRerollCost || 1));
-            const prevRestore = state.ui.freeRerollRestoreCost;
-            state.ui.freeRerollRestoreCost = (typeof prevRestore === 'number')
-                ? Math.min(prevRestore, cur)
-                : cur;
-        },
-    },
-
     {
         id: 'wall_break_speed',
         name: '벽부수기 속도 +10%',
@@ -514,19 +416,12 @@ function renderAbilityModal(floor = getFloor()) {
 
     if (coinsEl) coinsEl.textContent = String(state.coins);
     if (floorEl) floorEl.textContent = String(floor);
-    const freeLeft = Math.max(0, Math.floor(state.ui.freeRerollsLeft ?? 0));
-    if (rerollCostEl) {
-        rerollCostEl.textContent = (freeLeft > 0)
-            ? `0 (무료 ${freeLeft})`
-            : String(state.ui.abilityRerollCost);
-    }
-    if (rerollBtn) rerollBtn.disabled = (freeLeft > 0) ? false : (state.coins < state.ui.abilityRerollCost);
+    if (rerollCostEl) rerollCostEl.textContent = String(state.ui.abilityRerollCost);
+    if (rerollBtn) rerollBtn.disabled = state.coins < state.ui.abilityRerollCost;
     if (rerollBtn) {
-        rerollBtn.title = (freeLeft > 0)
-            ? `무료 리롤 ${freeLeft}회 남음`
-            : ((state.coins < state.ui.abilityRerollCost)
-                ? `코인이 부족합니다. (필요: ${state.ui.abilityRerollCost})`
-                : '');
+        rerollBtn.title = (state.coins < state.ui.abilityRerollCost)
+            ? `코인이 부족합니다. (필요: ${state.ui.abilityRerollCost})`
+            : '';
     }
 
     if (statusEl) {
@@ -581,9 +476,7 @@ function renderAbilityModal(floor = getFloor()) {
         desc.textContent = def.desc;
 
         const costEl = document.createElement('div');
-        const extraCost = (def.noExtraCost)
-            ? 0
-            : (state.abilities.boughtCountByRarity[def.rarity] || 0) * (def.rarity === 'COMMON' ? 1 : def.rarity === 'RARE' ? 2 : def.rarity === 'EPIC' ? 5 : 10);
+        const extraCost = (state.abilities.boughtCountByRarity[def.rarity] || 0) * (def.rarity === 'COMMON' ? 1 : def.rarity === 'RARE' ? 2 : def.rarity === 'EPIC' ? 5 : 10);
         const finalCost = def.cost + extraCost;
         const meetsReq = (typeof def.requires === 'function') ? !!def.requires() : true;
         const canBuy = state.coins >= finalCost && def.available() && meetsReq && !isBought;
@@ -618,8 +511,7 @@ function renderAbilityModal(floor = getFloor()) {
             if ((typeof def.requires === 'function') && !def.requires()) return;
 
             state.coins -= finalCost;
-            // 금융 어빌리티 등은 "추가비용 상승 없음": 구매 횟수에도 반영하지 않음
-            if (!def.noExtraCost) state.abilities.boughtCountByRarity[def.rarity]++;
+            state.abilities.boughtCountByRarity[def.rarity]++;
             state.ui.boughtAbilities.add(id);
             def.apply();
             renderAbilityModal(floor);

@@ -20,14 +20,6 @@ function toggleAuthButtons(isSignedIn) {
     if (signInBtn) signInBtn.classList.toggle('hidden', !!isSignedIn);
     if (signUpBtn) signUpBtn.classList.toggle('hidden', !!isSignedIn);
     if (signOutBtn) signOutBtn.classList.toggle('hidden', !isSignedIn);
-
-    // 로그인 성공 시 입력칸(아이디/비번/닉네임)은 숨김 처리
-    const emailEl = document.getElementById('auth-email');
-    const passEl = document.getElementById('auth-password');
-    const nameEl = document.getElementById('auth-username');
-    if (emailEl) emailEl.classList.toggle('hidden', !!isSignedIn);
-    if (passEl) passEl.classList.toggle('hidden', !!isSignedIn);
-    if (nameEl) nameEl.classList.toggle('hidden', !!isSignedIn);
 }
 
 async function upsertProfile(userId, username) {

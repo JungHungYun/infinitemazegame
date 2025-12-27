@@ -232,9 +232,6 @@ const state = {
         abilityChoices: [],
         boughtAbilities: new Set(),    // 이번 리롤에서 이미 구매한 능력들
         abilityRerollCost: 1,         // 현재 리롤 비용
-        // 무료 티켓(무료 리롤): 남은 횟수 / 소진 후 복구할 리롤 비용
-        freeRerollsLeft: 0,
-        freeRerollRestoreCost: 1,
         pendingEnter: null, // {x,y,entryDir}
         // 아이템 획득 직후 1초간 캐릭터 위에 보유량 표시(아이콘 + 세그먼트 숫자)
         pickupBadgeUntilMs: 0,
@@ -1708,8 +1705,6 @@ function restartRun() {
     state.ui.abilityChoices = [];
     state.ui.boughtAbilities = new Set();
     state.ui.abilityRerollCost = 1;
-    state.ui.freeRerollsLeft = 0;
-    state.ui.freeRerollRestoreCost = 1;
     state.ui.runStartMs = state.nowMs;
     state.ui.maxFloorReached = 1;
     state.ui.bossKills = 0;
@@ -2008,14 +2003,6 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
     // 최고 층 기록
     state.ui.maxFloorReached = Math.max(1, Math.floor(state.ui.maxFloorReached ?? 1), y + 1);
 
-    // 금융/층 기반 어빌리티 처리: 층 상승(=y 증가) 이벤트
-    try {
-        const prevFloor = (prevChunk?.y ?? y) + 1;
-        const newFloor = y + 1;
-        const gained = Math.max(0, Math.floor(newFloor - prevFloor));
-        if (gained > 0) onFloorsAdvanced(gained);
-    } catch (_) {}
-
     // 청크(맵) 전환 시 남아있는 투사체/예약발사 정리
     // - 적 투사체(state.chaserProjectiles)가 다음 맵까지 남아있는 버그 방지
     // - 플레이어 미사일/예약 발사도 좌표계가 바뀌므로 같이 정리
@@ -2064,33 +2051,6 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
     spawnItemForChunkIfNeeded();
     refillShieldOnChunkChange(prevChunk, state.currentChunk);
     updateUI();
-}
-
-function onFloorsAdvanced(floorsGained) {
-    const n = Math.max(0, Math.floor(floorsGained || 0));
-    if (n <= 0) return;
-    let changed = false;
-
-    // 적금: N층마다 이자 10코인, 지급할 때마다 필요 층수 -1(최소 1)
-    const saving = state.abilities.bankSaving;
-    if (saving?.enabled) {
-        saving.progress = Math.max(0, Math.floor(saving.progress || 0)) + n;
-        saving.targetFloors = Math.max(1, Math.floor(saving.targetFloors || 5));
-        while (saving.progress >= saving.targetFloors) {
-            saving.progress -= saving.targetFloors;
-            addCoins(10);
-            saving.targetFloors = Math.max(1, saving.targetFloors - 1);
-            changed = true;
-        }
-    }
-
-    // 생활비 대출: 유예 층수 차감
-    const loan = state.abilities.livingLoan;
-    if (loan?.debt > 0) {
-        loan.graceFloors = Math.max(0, Math.floor(loan.graceFloors || 0) - n);
-    }
-
-    if (changed) updateUI();
 }
 
 function randomOpenCellInMaze(maze, seedStr) {
@@ -2457,8 +2417,6 @@ function update(dt) {
         if (state.ui.modalOpen) return; // 어빌리티 선택 중엔 게임 일시정지
         // 시간 경과에 따른 점수 감점: 1초에 2점(층수 배수 적용)
         subScore(2 * (Math.min(dt, 80) / 1000), getFloor());
-        // 금융 어빌리티(예금/대출 상환 등)
-        updateFinanceAbilities(dt);
         updateMaze(dt);
         updateChaser(dt);
         updateBoss(dt);
@@ -2569,9 +2527,6 @@ function updateBoss(dt) {
         state.boss.missileSpawnMs = state.nowMs;
         // 보스전에서는 추격자 비활성화
         state.chaser.isPresentInMaze = false;
-        // 보스전 중에는 추격자 미사일이 나오면 안됨(기존 발사체도 제거)
-        state.chaserProjectiles = [];
-        state.chaser.lastShotMs = state.nowMs;
     }
 
     const getBossLaserWarnMs = () => {
@@ -2671,71 +2626,6 @@ function updateFx(dt) {
     }
 }
 
-function updateFinanceAbilities(dt) {
-    const ms = Math.max(0, Math.min(dt || 0, 200));
-    let changed = false;
-
-    // 예금: intervalMs마다 1코인, 받을 때마다 intervalMs -= 250ms (최소 1초)
-    const dep = state.abilities.bankDeposit;
-    if (dep?.enabled) {
-        dep.intervalMs = Math.max(1000, Math.floor(dep.intervalMs || 10000));
-        dep.timerMs = Math.max(0, Math.floor(dep.timerMs || 0)) + ms;
-        while (dep.timerMs >= dep.intervalMs) {
-            dep.timerMs -= dep.intervalMs;
-            addCoins(1);
-            dep.intervalMs = Math.max(1000, dep.intervalMs - 250);
-            changed = true;
-        }
-    }
-
-    // 생활비 대출: 유예 종료 후 상환(5초당 1코인), 코인이 음수면 1초당 추가 상환액(+1씩 증가)
-    const loan = state.abilities.livingLoan;
-    if (loan?.debt > 0) {
-        loan.debt = Math.max(0, Math.floor(loan.debt || 0));
-        loan.graceFloors = Math.max(0, Math.floor(loan.graceFloors || 0));
-        loan.repayAccMs = Math.max(0, Math.floor(loan.repayAccMs || 0));
-        loan.penaltyAccMs = Math.max(0, Math.floor(loan.penaltyAccMs || 0));
-        loan.penaltyPayAccMs = Math.max(0, Math.floor(loan.penaltyPayAccMs || 0));
-        loan.penaltyRate = Math.max(0, Math.floor(loan.penaltyRate || 0));
-
-        const repay = (amt) => {
-            const a = Math.max(0, Math.min(loan.debt, Math.floor(amt || 0)));
-            if (a <= 0) return;
-            state.coins = (state.coins ?? 0) - a;
-            loan.debt -= a;
-            changed = true;
-        };
-
-        if (loan.graceFloors <= 0) {
-            loan.repayAccMs += ms;
-            while (loan.repayAccMs >= 5000 && loan.debt > 0) {
-                loan.repayAccMs -= 5000;
-                repay(1);
-            }
-
-            if ((state.coins ?? 0) < 0 && loan.debt > 0) {
-                loan.penaltyAccMs += ms;
-                while (loan.penaltyAccMs >= 1000) {
-                    loan.penaltyAccMs -= 1000;
-                    loan.penaltyRate += 1;
-                }
-                loan.penaltyPayAccMs += ms;
-                while (loan.penaltyPayAccMs >= 1000 && loan.debt > 0) {
-                    loan.penaltyPayAccMs -= 1000;
-                    repay(loan.penaltyRate);
-                }
-            } else {
-                // 음수 상태가 아니면 패널티 누적은 리셋(너무 가혹해지는 것 방지)
-                loan.penaltyAccMs = 0;
-                loan.penaltyPayAccMs = 0;
-                loan.penaltyRate = 0;
-            }
-        }
-    }
-
-    if (changed) updateUI();
-}
-
 function updateWorld(dt) {
     // 월드맵에서는 청크(정수 좌표) 기반으로만 이동(미로 출구로 나올 때)하도록 둡니다.
     // 실수 좌표로 움직이면 청크 생성 키가 무한히 쪼개져 성능/정합성이 깨질 수 있어 비활성화합니다.
@@ -2792,8 +2682,6 @@ function updateMaze(dt) {
 
 function updateChaser(dt) {
     if (!state.chaser.active) return;
-    // 보스전 중에는 추격자 미사일/로직 자체를 진행하지 않음
-    if (state.boss.active) return;
     // 추격자는 플레이어와 같은 청크에 있다고 가정(청크 넘어갈 때 함께 진입)
     const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
     const maze = chunk.maze;
@@ -2824,9 +2712,7 @@ function updateChaser(dt) {
     }
 
     // 20렙부터 레이저 발사
-    // 스턴/유예 시간에는 투사체도 발사하지 않게(보스 클리어 직후 "즉시 발사" 체감 방지)
-    const canShoot = state.nowMs >= state.chaser.stunUntilMs && state.nowMs >= state.chaser.graceUntilMs;
-    if (getFloor() >= 20 && canShoot && state.nowMs - state.chaser.lastShotMs > 5000) {
+    if (getFloor() >= 20 && state.nowMs - state.chaser.lastShotMs > 5000) {
         state.chaser.lastShotMs = state.nowMs;
         const dx = state.player.mazePos.x - state.chaser.pos.x;
         const dy = state.player.mazePos.y - state.chaser.pos.y;
@@ -3240,18 +3126,6 @@ function onMissileHitTarget(m) {
             if (chunk) chunk.cleared = true;
             addScore(1000, getFloor());
 
-            // 보스 클리어 직후: 추격자/투사체가 바로 튀어나오는 현상 방지
-            // - 다음 청크에서 추격자 "진입" 딜레이를 강제로 늘림
-            // - 투사체 쿨다운을 현재 시각으로 리셋
-            // - 짧은 유예를 줘서 전환 직후 깔끔한 호흡 확보
-            try { state.chaserProjectiles = []; } catch (_) {}
-            state.chaser.lastShotMs = state.nowMs;
-            state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs || 0, state.nowMs + CONFIG.POST_BOSS_GRACE_MS);
-            state.chaser.nextEntryDelayMs = Math.min(
-                CONFIG.CHASER_ENTRY_DELAY_MAX_MS,
-                Math.max(state.chaser.nextEntryDelayMs || 0, CONFIG.POST_BOSS_GRACE_MS)
-            );
-
             // 보스 클리어 후 다음 층(North)으로 자동 이동 예약
             const nextX = state.currentChunk.x;
             const nextY = state.currentChunk.y + 1;
@@ -3483,8 +3357,7 @@ function getWallLevelDistribution(floor) {
         const prevLvDef = CONFIG.WALL_LEVELS[i - 1];
         
         // 이전 레벨이 100%가 된 층 + 10층부터 새 레벨이 나타나기 시작
-        // 요구사항: 파랑(레벨 1)은 21층 이후부터 등장
-        const startAppearingFloor = currentFloorThreshold + (i === 1 ? 20 : 10);
+        const startAppearingFloor = currentFloorThreshold + 10;
         
         if (floor < startAppearingFloor) {
             // 아직 새 레벨이 등장하기 전임. 현재 baseLevel이 100%

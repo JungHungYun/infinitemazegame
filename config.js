@@ -71,10 +71,6 @@ const CONFIG = {
     WALL_REGEN_MS: 10000,
     MISSILE_RESPAWN_MS: 5000,
 
-    // 보스 클리어 직후 안전 구간(추격자/투사체가 "끝나자마자" 튀어나오는 것 방지)
-    // - 추격자 재진입 딜레이 하한으로도 사용
-    POST_BOSS_GRACE_MS: 3000,
-
     // 어빌리티 희귀도 확률
     RARITY_PROBS: {
         COMMON: 0.71,
