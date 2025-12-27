@@ -106,6 +106,14 @@ async function leaderboardRefresh() {
         return;
     }
 
+    // 로딩 표시(기존 "불러오는 중..."이 남아있는 경우도 강제로 갱신)
+    try {
+        const root = document.getElementById('leaderboard');
+        if (root) {
+            root.innerHTML = '<div class="lb-row muted">불러오는 중...</div>';
+        }
+    } catch (_) {}
+
     setLeaderboardMsg('');
 
     // 1) 우선 view 기반 (가장 빠름)
@@ -222,6 +230,14 @@ async function leaderboardSubmitScore({ score, floor }) {
 window.leaderboardRefresh = leaderboardRefresh;
 window.leaderboardSubmitScore = leaderboardSubmitScore;
 
-leaderboardRefresh();
+// 초기 로드는 예외가 발생하더라도 화면에 원인을 표시하도록 보호
+(async () => {
+    try {
+        await leaderboardRefresh();
+    } catch (err) {
+        setLeaderboardMsg(`리더보드 초기화 실패: ${String(err?.message || err)}`, true);
+        renderLeaderboardRows([]);
+    }
+})();
 
 

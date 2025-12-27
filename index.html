@@ -145,5 +145,19 @@
     <script src="ui_settings.js?v=20251227_1"></script>
     <script src="ui_ability.js?v=20251227_1"></script>
     <script src="game.js?v=20251227_1"></script>
+    <script>
+        // 리더보드가 "불러오는 중..."에서 멈출 때 원인 파악용 안전장치
+        // (ui_leaderboard.js가 404/문법 오류 등으로 로드 실패하면 여기서 메시지를 띄움)
+        window.addEventListener('load', () => {
+            const msgEl = document.getElementById('leaderboard-msg');
+            if (typeof window.leaderboardRefresh === 'function') {
+                // 혹시 초기 호출 타이밍 이슈가 있으면 한 번 더 호출
+                window.leaderboardRefresh();
+            } else if (msgEl) {
+                msgEl.textContent = '리더보드 스크립트 로드 실패(파일 경로/캐시/배포 상태를 확인하세요).';
+                msgEl.style.color = '#ff9aa2';
+            }
+        });
+    </script>
 </body>
 </html>
