@@ -4721,7 +4721,7 @@ function drawMaze() {
         // 이미지가 아직 로드되지 않았으면 기존 원 형태로 폴백
         const imgReady = !!(CHASER_IMG && CHASER_IMG.complete && CHASER_IMG.naturalWidth > 0);
         if (imgReady) {
-            const size = cellSize * CONFIG.CHASER_RADIUS * 3.6; // 1.5배 증가 (2.4 -> 3.6)
+            const size = cellSize * CONFIG.CHASER_RADIUS * 5; // 1.5배 증가 (2.4 -> 3.6)
             ctx.save();
             ctx.translate(cX, cY);
             ctx.rotate(ang);
