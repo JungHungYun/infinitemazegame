@@ -151,6 +151,7 @@ const state = {
         runStartMs: null,
         maxFloorReached: 1,
         bossKills: 0,
+        isMobile: false,
         abilityShownFloors: new Set(), // 이미 선택창을 띄운 층(중복 방지)
         abilityChoices: [],
         boughtAbilities: new Set(),    // 이번 리롤에서 이미 구매한 능력들
@@ -1304,16 +1305,34 @@ class Chunk {
 }
 
 // --- 초기화 ---
+function detectIsMobile() {
+    // “모바일”을 터치/조작 방식 관점(coarse pointer)으로 판단
+    try {
+        if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+        if (window.matchMedia && window.matchMedia('(hover: none)').matches) return true;
+    } catch (_) {}
+    return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+}
+
 function init() {
     resize();
     window.addEventListener('resize', resize);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('mousemove', handleMouseMove);
-    // 모바일/터치 지원: pointer 이벤트로 통일 (탭 = X(미사일)과 동일한 동작)
-    window.addEventListener('pointermove', handlePointerMove, { passive: false });
-    canvas.addEventListener('pointerdown', handlePointerDown, { passive: false });
-    window.addEventListener('pointerup', handlePointerUp, { passive: false });
+
+    // 메인 화면에서 디바이스 판별 후, 입력/UI를 분기
+    state.ui.isMobile = detectIsMobile();
+
+    if (state.ui.isMobile) {
+        // 모바일: 드래그(조작) + 탭(월드맵 진입) 을 위해 pointer 사용
+        window.addEventListener('pointermove', handlePointerMove, { passive: false });
+        canvas.addEventListener('pointerdown', handlePointerDown, { passive: false });
+        window.addEventListener('pointerup', handlePointerUp, { passive: false });
+    } else {
+        // PC: 기존처럼 클릭으로 월드맵 진입
+        canvas.addEventListener('click', handleClick);
+    }
     initHudUI();
     initAbilityModalUI();
     initSettingsModalUI();
@@ -1501,8 +1520,10 @@ function handleMouseMove(e) {
 function handlePointerDown(e) {
     // 오디오 언락(브라우저 자동재생 정책 대응)
     unlockAudioOnce();
-    // 터치 스크롤/줌 제스처로 캔버스 입력이 씹히는 것 방지
-    try { e.preventDefault(); } catch (_) {}
+    // 모바일에서만 스크롤/줌 제스처로 캔버스 입력이 씹히는 것 방지
+    if (state.ui.isMobile) {
+        try { e.preventDefault(); } catch (_) {}
+    }
 
     state.mouse.x = e.clientX;
     state.mouse.y = e.clientY;
@@ -1517,7 +1538,7 @@ function handlePointerDown(e) {
 
 function handlePointerMove(e) {
     // 터치에서도 마우스 좌표 업데이트(모바일 조작 핵심)
-    if (e.cancelable) {
+    if (state.ui.isMobile && e.cancelable) {
         // 화면 스크롤 방지(게임 조작 우선)
         try { e.preventDefault(); } catch (_) {}
     }
@@ -1605,13 +1626,13 @@ function updateUI() {
     const hud = document.getElementById('hud');
     const missileBtn = document.getElementById('hud-missile');
     const settingsBtn = document.getElementById('hud-settings');
-    const hudVisible = !!state.ui.started && !state.ui.gameOverOpen;
+    const hudVisible = !!state.ui.started && !state.ui.gameOverOpen && !!state.ui.isMobile;
     if (hud) {
         hud.classList.toggle('hidden', !hudVisible);
         hud.setAttribute('aria-hidden', hudVisible ? 'false' : 'true');
     }
 
-    // 설정 버튼은 시작 후 항상 표시(모달이 열려있어도 무방)
+    // 설정 버튼은 모바일에서 시작 후 항상 표시(모달이 열려있어도 무방)
     if (settingsBtn) {
         settingsBtn.classList.toggle('hidden', !hudVisible);
     }
