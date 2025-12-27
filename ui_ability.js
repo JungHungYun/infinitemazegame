@@ -421,11 +421,16 @@ function openAbilityModal(floor) {
     if (!state.ui.abilityNotice) state.ui.abilityNotice = '';
     // 화면은 월드로 두고(정지), 모달만 표시
     state.mode = 'WORLD';
-    state.ui.abilityRerollCost = 1; // 층마다 리롤 비용 초기화
     // 무료 티켓: 남아있는 티켓을 이번 상점에 반영
     state.ui.freeRerollsLeft = Math.max(0, Math.floor(state.abilities?.freeRerollTickets ?? 0));
-    // 티켓은 "해당 상점"에서만 리롤 비용을 복구시키므로, 현재 상점 시작 비용(기본 1)로 저장
-    state.ui.freeRerollRestoreCost = Math.max(1, Math.floor(state.ui.abilityRerollCost || 1));
+    // 무료 티켓이 없을 때만 리롤 비용 초기화 (무료 티켓이 있으면 이전 상점의 비용 유지)
+    if (state.ui.freeRerollsLeft <= 0) {
+        state.ui.abilityRerollCost = 1; // 층마다 리롤 비용 초기화 (무료 티켓 없을 때만)
+    }
+    // 티켓이 없던 상태에서 처음 구매하는 경우를 위해 현재 리롤 비용 저장
+    if ((state.abilities?.freeRerollTickets ?? 0) <= 0) {
+        state.ui.freeRerollRestoreCost = Math.max(1, Math.floor(state.ui.abilityRerollCost || 1));
+    }
     state.ui.boughtAbilities.clear();
     rollAbilityChoices();
     renderAbilityModal(floor);
@@ -445,8 +450,10 @@ function closeAbilityModal() {
 
     // 무료 티켓 잔여를 능력치에 다시 반영
     state.abilities.freeRerollTickets = Math.max(0, Math.floor(state.ui.freeRerollsLeft ?? 0));
-    // 층이 오르면 리롤 비용은 다시 1로 초기화되므로 restoreCost는 유지하지 않음
-    state.abilities.freeRerollRestoreCost = 1;
+    // 무료 티켓이 남아있으면 restoreCost 유지, 없으면 초기화
+    if ((state.abilities.freeRerollTickets ?? 0) <= 0) {
+        state.abilities.freeRerollRestoreCost = 1;
+    }
     state.ui.freeRerollsLeft = 0;
     state.ui.freeRerollRestoreCost = 1;
 
