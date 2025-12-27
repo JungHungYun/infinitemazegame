@@ -4720,7 +4720,7 @@ function drawMaze() {
 
         // 이미지가 아직 로드되지 않았으면 기존 원 형태로 폴백
         const imgReady = !!(CHASER_IMG && CHASER_IMG.complete && CHASER_IMG.naturalWidth > 0);
-        const chaserSize = cellSize * CONFIG.CHASER_RADIUS * 10; // 이미지/원 모두 동일한 크기 배율 적용
+        const chaserSize = cellSize * CONFIG.CHASER_RADIUS * 3; // 이미지/원 모두 동일한 크기 배율 적용
         if (imgReady) {
             ctx.save();
             ctx.translate(cX, cY);
