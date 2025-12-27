@@ -1,0 +1,321 @@
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #0a0a0a;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+canvas {
+    display: block;
+}
+
+/* Title screen */
+#title-screen {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(1200px 700px at 50% 35%, rgba(0,255,255,0.10), rgba(0,0,0,0.82) 55%, rgba(0,0,0,0.92));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 30; /* settings보다 위 */
+}
+
+#title-screen.hidden { display: none; }
+
+.title-card {
+    width: min(760px, calc(100vw - 40px));
+    background: rgba(12, 12, 12, 0.95);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    box-shadow: 0 18px 65px rgba(0,0,0,0.78);
+    padding: 22px;
+    text-align: center;
+}
+
+.title-name {
+    font-size: 34px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 1px;
+}
+
+.title-sub {
+    margin-top: 8px;
+    color: #bdbdbd;
+    font-size: 14px;
+}
+
+.title-controls {
+    margin: 16px auto 18px;
+    width: min(560px, 100%);
+    text-align: left;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.title-controls-title {
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+
+.title-controls-grid {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 8px 10px;
+    font-size: 13px;
+}
+
+.title-controls-grid .k {
+    color: #9ad1ff;
+    font-weight: 900;
+}
+
+.title-controls-grid .v {
+    color: #ddd;
+    font-weight: 600;
+}
+
+.btn-primary {
+    background: rgba(0,255,255,0.16);
+    border-color: rgba(0,255,255,0.35);
+}
+
+.title-hint {
+    margin-top: 10px;
+    color: #9a9a9a;
+    font-size: 12px;
+}
+
+/* Ability modal */
+.hidden { display: none; }
+
+#ability-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+/* `.hidden`이 제대로 동작하도록, 표시(display)는 hidden 여부에 따라 결정 */
+#ability-modal:not(.hidden) {
+    display: flex;
+}
+
+.settings-card {
+    width: min(560px, calc(100vw - 40px));
+    background: rgba(12, 12, 12, 0.95);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    box-shadow: 0 18px 55px rgba(0,0,0,0.75);
+    padding: 18px;
+}
+
+#settings-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.72);
+    align-items: center;
+    justify-content: center;
+    z-index: 20; /* ability보다 위 */
+}
+
+#settings-modal:not(.hidden) {
+    display: flex;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.settings-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #fff;
+}
+
+.settings-row {
+    display: grid;
+    grid-template-columns: 70px 1fr 56px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+}
+
+.settings-label {
+    color: #ddd;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.settings-val {
+    text-align: right;
+    color: #9ad1ff;
+    font-weight: 800;
+}
+
+.settings-slider {
+    width: 100%;
+}
+
+.settings-sub {
+    margin-top: 10px;
+    color: #9a9a9a;
+    font-size: 12px;
+}
+
+.ability-card {
+    width: min(720px, calc(100vw - 40px));
+    background: rgba(12, 12, 12, 0.95);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    box-shadow: 0 18px 55px rgba(0,0,0,0.75);
+    padding: 18px 18px 14px;
+}
+
+.ability-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.ability-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.ability-sub {
+    font-size: 13px;
+    color: #bbb;
+}
+
+.ability-choices {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.ability-choice {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 150px;
+}
+
+.ability-name {
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+.ability-desc {
+    color: #cfcfcf;
+    font-size: 12.5px;
+    line-height: 1.5;
+    flex: 1;
+}
+
+.ability-cost {
+    color: #ffd24d;
+    font-weight: 700;
+    font-size: 12.5px;
+    margin-top: 10px;
+}
+
+.ability-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.btn {
+    pointer-events: auto;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    padding: 9px 12px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+.btn:hover { background: rgba(255,255,255,0.10); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-secondary { background: rgba(255,255,255,0.03); }
+
+.btn-buy {
+    width: 100%;
+    margin-top: 10px;
+    background: rgba(0,255,255,0.10);
+    border-color: rgba(0,255,255,0.25);
+}
+
+.ability-status {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 14px;
+    padding: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+}
+
+.stat-item {
+    font-size: 11px;
+    color: #bbb;
+}
+
+.stat-val {
+    color: #00ffff;
+    font-weight: 700;
+}
+
+/* 어빌리티 희귀도 색상 */
+.rarity-common { color: #ffffff; border-color: rgba(255,255,255,0.2) !important; }
+.rarity-rare { color: #4488ff; border-color: rgba(68,136,255,0.4) !important; }
+.rarity-epic { color: #aa44ff; border-color: rgba(170,68,255,0.5) !important; }
+.rarity-legendary { color: #ffaa00; border-color: rgba(255,170,0,0.6) !important; text-shadow: 0 0 8px rgba(255,170,0,0.4); }
+
+.rarity-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.bg-common { background: rgba(255,255,255,0.1); color: #fff; }
+.bg-rare { background: rgba(68,136,255,0.2); color: #4488ff; }
+.bg-epic { background: rgba(170,68,255,0.2); color: #aa44ff; }
+.bg-legendary { background: rgba(255,170,0,0.2); color: #ffaa00; }

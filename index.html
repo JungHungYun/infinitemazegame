@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Maze Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <!-- 타이틀 화면: 첫 입력(키/클릭) 시 시작 -->
+    <div id="title-screen" role="dialog" aria-modal="true">
+        <div class="title-card">
+            <div class="title-name">INFINITE MAZE</div>
+            <div class="title-sub">미로를 돌파하고, 추격자를 피해 올라가세요.</div>
+
+            <div class="title-controls">
+                <div class="title-controls-title">조작법</div>
+                <div class="title-controls-grid">
+                    <div class="k">마우스</div><div class="v">이동 방향</div>
+                    <div class="k">Z</div><div class="v">조작 활성/비활성 토글</div>
+                    <div class="k">X</div><div class="v">미사일 발사</div>
+                    <div class="k">ESC</div><div class="v">설정</div>
+                </div>
+            </div>
+
+            <button id="title-start" class="btn btn-primary">아무 키나 누르시오 / 클릭하여 시작</button>
+            <div class="title-hint">첫 입력 이후 오디오가 재생됩니다.</div>
+        </div>
+    </div>
+
+    <!-- 10층마다 표시되는 어빌리티 선택창 -->
+    <div id="ability-modal" class="hidden" role="dialog" aria-modal="true">
+        <div class="ability-card">
+            <div class="ability-header">
+                <div class="ability-title">어빌리티 선택</div>
+                <div class="ability-sub">
+                    코인: <span id="ability-coin-count">0</span>
+                    · 층수: <span id="ability-floor">1</span>
+                </div>
+            </div>
+
+            <div id="ability-choices" class="ability-choices"></div>
+
+            <div id="ability-status" class="ability-status"></div>
+
+            <div class="ability-actions">
+                <button id="ability-reroll" class="btn">리롤 (<span id="ability-reroll-cost">1</span>)</button>
+                <button id="ability-skip" class="btn btn-secondary">건너뛰기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ESC 설정창 -->
+    <div id="settings-modal" class="hidden" role="dialog" aria-modal="true">
+        <div class="settings-card">
+            <div class="settings-header">
+                <div class="settings-title">설정</div>
+                <button id="settings-close" class="btn btn-secondary">닫기 (Esc)</button>
+            </div>
+
+            <div class="settings-row">
+                <div class="settings-label">효과음</div>
+                <input id="settings-sfx" class="settings-slider" type="range" min="0" max="100" step="1" value="85">
+                <div id="settings-sfx-val" class="settings-val">85%</div>
+            </div>
+
+            <div class="settings-row">
+                <div class="settings-label">BGM</div>
+                <input id="settings-bgm" class="settings-slider" type="range" min="0" max="100" step="1" value="35">
+                <div id="settings-bgm-val" class="settings-val">35%</div>
+            </div>
+
+            <div class="settings-sub">첫 입력(키/클릭) 이후 오디오가 재생됩니다.</div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
