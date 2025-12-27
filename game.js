@@ -1762,7 +1762,9 @@ function initTitleScreenUI() {
 
     if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); start(); });
     window.addEventListener('keydown', () => start(), { once: true });
-    canvas.addEventListener('click', () => start(), { once: true });
+    // 타이틀 오버레이가 캔버스를 덮으므로, 오버레이 자체에서도 클릭으로 시작되게 처리
+    el.addEventListener('click', (e) => { e.preventDefault(); start(); }, { once: true });
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); start(); }, { once: true, passive: false });
 }
 
 function initAbilityModalUI() {
