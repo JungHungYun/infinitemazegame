@@ -4720,22 +4720,22 @@ function drawMaze() {
 
         // 이미지가 아직 로드되지 않았으면 기존 원 형태로 폴백
         const imgReady = !!(CHASER_IMG && CHASER_IMG.complete && CHASER_IMG.naturalWidth > 0);
+        const chaserSize = cellSize * CONFIG.CHASER_RADIUS * 10; // 이미지/원 모두 동일한 크기 배율 적용
         if (imgReady) {
-            const size = cellSize * CONFIG.CHASER_RADIUS * 10; // 1.5배 증가 (2.4 -> 3.6)
             ctx.save();
             ctx.translate(cX, cY);
             ctx.rotate(ang);
             ctx.globalAlpha = alpha;
             ctx.shadowBlur = 18;
             ctx.shadowColor = 'rgba(255, 80, 80, 0.65)';
-            ctx.drawImage(CHASER_IMG, -size / 2, -size / 2, size, size);
+            ctx.drawImage(CHASER_IMG, -chaserSize / 2, -chaserSize / 2, chaserSize, chaserSize);
             ctx.restore();
         } else {
         ctx.fillStyle = `rgba(255, 80, 80, ${alpha})`;
         ctx.shadowBlur = 25;
         ctx.shadowColor = 'rgba(255, 80, 80, 0.9)';
         ctx.beginPath();
-        ctx.arc(cX, cY, cellSize * CONFIG.CHASER_RADIUS, 0, Math.PI * 2);
+        ctx.arc(cX, cY, chaserSize / 2, 0, Math.PI * 2); // size는 직경이므로 반지름은 /2
         ctx.fill();
         ctx.shadowBlur = 0;
         }
