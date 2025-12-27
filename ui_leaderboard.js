@@ -58,6 +58,46 @@ function setLeaderboardMsg(msg, isError = false) {
     el.style.color = isError ? '#ff9aa2' : '#9a9a9a';
 }
 
+function isSchemaCacheMissingError(err) {
+    const m = String(err?.message || '');
+    return m.includes("schema cache") || m.includes("Could not find the table") || m.includes("leaderboard_view");
+}
+
+async function fetchProfilesMapByIds(sb, ids) {
+    const uniq = Array.from(new Set((ids || []).filter(Boolean)));
+    if (!uniq.length) return new Map();
+    const { data, error } = await sb.from('profiles').select('id,username').in('id', uniq);
+    if (error) return new Map();
+    const mp = new Map();
+    for (const r of (data || [])) mp.set(r.id, r.username);
+    return mp;
+}
+
+function sortAndRank(rows) {
+    const copy = [...(rows || [])];
+    copy.sort((a, b) => {
+        const as = Number(a.score || 0), bs = Number(b.score || 0);
+        if (bs !== as) return bs - as;
+        const af = Number(a.floor || 1), bf = Number(b.floor || 1);
+        if (bf !== af) return bf - af;
+        const at = new Date(a.updated_at || 0).getTime();
+        const bt = new Date(b.updated_at || 0).getTime();
+        return at - bt;
+    });
+    // rank() 스타일: 동점이면 같은 rank
+    let prevKey = null;
+    let currentRank = 0;
+    copy.forEach((r, i) => {
+        const key = `${r.score}|${r.floor}`;
+        if (key !== prevKey) {
+            currentRank = i + 1;
+            prevKey = key;
+        }
+        r.rank = currentRank;
+    });
+    return copy;
+}
+
 async function leaderboardRefresh() {
     const sb = window.supabaseClient;
     if (!sb) {
@@ -67,49 +107,90 @@ async function leaderboardRefresh() {
     }
 
     setLeaderboardMsg('');
-    // leaderboard_view: rank, user_id, score, floor, updated_at, display_name
+
+    // 1) 우선 view 기반 (가장 빠름)
     const { data, error } = await sb
         .from('leaderboard_view')
         .select('rank,user_id,score,floor,display_name,updated_at')
         .order('rank', { ascending: true })
         .limit(10);
 
-    if (error) {
+    if (!error) {
+        const rows = (data || []).map((r) => ({
+            rank: r.rank,
+            user_id: r.user_id,
+            score: r.score,
+            floor: r.floor,
+            display_name: r.display_name || '익명',
+            updated_at: r.updated_at,
+        }));
+        renderLeaderboardRows(rows);
+
+        // 내 순위가 TOP10 밖이면 아래에 별도 표기
+        const myId = window.currentUser?.id || null;
+        if (!myId) return;
+        const inTop10 = rows.some(r => r.user_id === myId);
+        if (inTop10) return;
+
+        const { data: myRow, error: myErr } = await sb
+            .from('leaderboard_view')
+            .select('rank,user_id,score,floor,display_name,updated_at')
+            .eq('user_id', myId)
+            .maybeSingle();
+
+        if (!myErr && myRow) {
+            renderLeaderboardRows([
+                ...rows,
+                { rank: '…', user_id: '__sep__', score: '', floor: '', display_name: '' },
+                { ...myRow },
+            ]);
+        }
+        return;
+    }
+
+    // 2) view가 없거나 schema cache 문제면 테이블 폴백으로라도 표시
+    if (!isSchemaCacheMissingError(error)) {
         setLeaderboardMsg(error.message, true);
         renderLeaderboardRows([]);
         return;
     }
 
-    const rows = (data || []).map((r) => ({
+    // 폴백: leaderboard_best를 직접 읽고 클라에서 랭킹 계산
+    setLeaderboardMsg('리더보드 뷰가 아직 준비되지 않아 폴백 모드로 표시 중입니다.', true);
+    const { data: best, error: bestErr } = await sb
+        .from('leaderboard_best')
+        .select('user_id,score,floor,updated_at')
+        .limit(500);
+    if (bestErr) {
+        setLeaderboardMsg(bestErr.message, true);
+        renderLeaderboardRows([]);
+        return;
+    }
+
+    const ranked = sortAndRank(best || []);
+    const top10 = ranked.slice(0, 10);
+    const profiles = await fetchProfilesMapByIds(sb, top10.map(r => r.user_id));
+    const rows = top10.map((r) => ({
         rank: r.rank,
         user_id: r.user_id,
         score: r.score,
         floor: r.floor,
-        display_name: r.display_name || '익명',
+        display_name: profiles.get(r.user_id) || `익명#${String(r.user_id).slice(0, 4)}`,
+        updated_at: r.updated_at,
     }));
     renderLeaderboardRows(rows);
 
-    // 내 순위가 TOP10 밖이면 아래에 별도 표기
     const myId = window.currentUser?.id || null;
     if (!myId) return;
     const inTop10 = rows.some(r => r.user_id === myId);
     if (inTop10) return;
-
-    const { data: myRow, error: myErr } = await sb
-        .from('leaderboard_view')
-        .select('rank,user_id,score,floor,display_name,updated_at')
-        .eq('user_id', myId)
-        .maybeSingle();
-
-    if (myErr) return;
-    if (!myRow) return;
-
-    // NOTE: renderLeaderboardRows는 root를 통째로 다시 그리므로,
-    // 구분선(...)을 포함한 배열로 렌더링
+    const mine = ranked.find(r => r.user_id === myId);
+    if (!mine) return;
+    const myName = (await fetchProfilesMapByIds(sb, [myId])).get(myId) || `익명#${String(myId).slice(0, 4)}`;
     renderLeaderboardRows([
         ...rows,
         { rank: '…', user_id: '__sep__', score: '', floor: '', display_name: '' },
-        { ...myRow },
+        { rank: mine.rank, user_id: myId, score: mine.score, floor: mine.floor, display_name: myName, updated_at: mine.updated_at },
     ]);
 }
 
@@ -118,7 +199,10 @@ async function leaderboardSubmitScore({ score, floor }) {
     if (!sb) return;
     const { data } = await sb.auth.getUser();
     const user = data?.user;
-    if (!user) return; // 로그인 안 했으면 업로드 안 함
+    if (!user) {
+        setLeaderboardMsg('로그인해야 리더보드에 기록됩니다.', true);
+        return;
+    }
 
     const s = Math.max(0, Math.floor(score ?? 0));
     const f = Math.max(1, Math.floor(floor ?? 1));

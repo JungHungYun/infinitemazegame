@@ -62,6 +62,9 @@ from public.leaderboard_best lb
 left join public.profiles p
   on p.id = lb.user_id;
 
+-- PostgREST(=supabase-js)에서 view를 읽을 수 있도록 권한 부여
+grant select on public.leaderboard_view to anon, authenticated;
+
 -- ===== 3) 점수 제출 RPC (조건부 업서트) =====
 create or replace function public.submit_score(p_score int, p_floor int)
 returns void
@@ -125,5 +128,10 @@ using (true);
 -- ===== 6) RPC 권한 =====
 revoke all on function public.submit_score(int, int) from public;
 grant execute on function public.submit_score(int, int) to authenticated;
+
+-- ===== 7) PostgREST 스키마 캐시 갱신 =====
+-- SQL 실행 직후에도 supabase-js에서 "schema cache" 오류가 나면 아래를 추가로 실행하세요.
+-- (Supabase가 PostgREST 캐시를 리로드하도록 알림)
+notify pgrst, 'reload schema';
 
 
