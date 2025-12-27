@@ -31,11 +31,35 @@ create table if not exists public.leaderboard_scores (
 );
 
 -- ===== 0.1) 재실행(업그레이드) 안전장치: 기존 테이블에도 컬럼 추가 =====
+-- 기존에 platform 컬럼이 없던 버전에서 업그레이드될 수 있으므로:
+-- 1) 컬럼이 없으면 추가
+-- 2) null/빈값을 'pc'로 정리
+-- 3) NOT NULL + DEFAULT로 고정
 alter table public.leaderboard_best
-  add column if not exists platform text not null default 'pc';
+  add column if not exists platform text;
+
+update public.leaderboard_best
+set platform = 'pc'
+where platform is null or length(trim(platform)) = 0;
+
+alter table public.leaderboard_best
+  alter column platform set default 'pc';
+
+alter table public.leaderboard_best
+  alter column platform set not null;
 
 alter table public.leaderboard_scores
-  add column if not exists platform text not null default 'pc';
+  add column if not exists platform text;
+
+update public.leaderboard_scores
+set platform = 'pc'
+where platform is null or length(trim(platform)) = 0;
+
+alter table public.leaderboard_scores
+  alter column platform set default 'pc';
+
+alter table public.leaderboard_scores
+  alter column platform set not null;
 
 -- ===== 1) 닉네임 유니크(대소문자 무시) =====
 alter table public.profiles
@@ -65,7 +89,7 @@ alter table public.profiles
 
 -- ===== 2) 랭킹 뷰 (1인 1기록 기반) =====
 -- NOTE: create or replace view는 컬럼 개수/순서 변경이 불가하므로(drop 후 재생성)
-drop view if exists public.leaderboard_view;
+drop view if exists public.leaderboard_view cascade;
 create view public.leaderboard_view as
 select
   rank() over (
