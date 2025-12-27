@@ -241,26 +241,29 @@ async function leaderboardRefresh() {
 
 async function leaderboardSubmitScore({ score, floor }) {
     const sb = window.supabaseClient;
-    if (!sb) return;
+    if (!sb) throw new Error('Supabase 미설정');
     const { data } = await sb.auth.getUser();
     const user = data?.user;
     if (!user) {
-        setLeaderboardMsg('로그인해야 리더보드에 기록됩니다.', true);
-        return;
+        const err = new Error('로그인해야 리더보드에 기록됩니다.');
+        setLeaderboardMsg(err.message, true);
+        throw err;
     }
 
     const s = Math.max(0, Math.floor(score ?? 0));
     const f = Math.max(1, Math.floor(floor ?? 1));
 
-    // 1인 1기록(최고점) 유지: RPC로 조건부 업서트
+    // 누적 기록 + 최고점(best) 업데이트: RPC로 처리
     const { error } = await sb.rpc('submit_score', { p_score: s, p_floor: f });
     if (error) {
+        console.error('[leaderboard] submit_score failed', error);
         setLeaderboardMsg(error.message, true);
-        return;
+        throw error;
     }
 
     // 업로드 후 새로고침
     await leaderboardRefresh();
+    return true;
 }
 
 // ui_gameover.js에서 호출할 수 있게 전역으로 노출

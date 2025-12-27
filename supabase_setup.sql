@@ -3,6 +3,7 @@
 -- 1) 닉네임 중복 금지(대소문자 무시) - username이 null이 아닌 경우에만 유니크
 -- 2) 1인당 최고점만 유지(업서트) - leaderboard_best 테이블
 -- 3) 랭킹/내 순위 조회 최적화 - leaderboard_view 뷰 + submit_score RPC
+-- 4) 모든 런 기록 누적 저장(append-only) - leaderboard_scores 테이블
 
 -- ===== 0) 기존 테이블이 없다면 생성(처음 세팅) =====
 create table if not exists public.profiles (
@@ -16,6 +17,15 @@ create table if not exists public.leaderboard_best (
   score int not null default 0,
   floor int not null default 1,
   updated_at timestamptz not null default now()
+);
+
+-- 모든 제출 기록(누적) 저장: 리더보드는 best/view로 보되, 기록 자체는 전부 쌓습니다.
+create table if not exists public.leaderboard_scores (
+  id bigserial primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  score int not null default 0,
+  floor int not null default 1,
+  created_at timestamptz not null default now()
 );
 
 -- ===== 1) 닉네임 유니크(대소문자 무시) =====
@@ -81,6 +91,10 @@ begin
     raise exception 'not authenticated';
   end if;
 
+  -- 0) 누적 기록은 항상 저장
+  insert into public.leaderboard_scores(user_id, score, floor, created_at)
+  values (uid, s, f, now());
+
   insert into public.leaderboard_best(user_id, score, floor, updated_at)
   values (uid, s, f, now())
   on conflict (user_id) do update
@@ -97,6 +111,7 @@ $$;
 -- ===== 4) RLS 활성화 =====
 alter table public.profiles enable row level security;
 alter table public.leaderboard_best enable row level security;
+alter table public.leaderboard_scores enable row level security;
 
 -- ===== 5) Policies =====
 -- profiles: 모두 읽기 가능, 본인만 insert/update 가능
@@ -124,6 +139,13 @@ create policy "leaderboard_best readable by everyone"
 on public.leaderboard_best for select
 to anon, authenticated
 using (true);
+
+-- leaderboard_scores: 누적 기록 저장(삽입)은 인증 사용자만, 읽기는 기본적으로 막음(필요 시 정책 추가)
+drop policy if exists "leaderboard_scores insert by owner" on public.leaderboard_scores;
+create policy "leaderboard_scores insert by owner"
+on public.leaderboard_scores for insert
+to authenticated
+with check (auth.uid() = user_id);
 
 -- ===== 6) RPC 권한 =====
 revoke all on function public.submit_score(int, int) from public;

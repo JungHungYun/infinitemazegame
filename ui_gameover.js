@@ -77,7 +77,13 @@ function openGameOverModal() {
 
     // 리더보드 업로드(로그인한 경우에만)
     if (typeof window.leaderboardSubmitScore === 'function') {
-        window.leaderboardSubmitScore({ score, floor }).catch?.(() => {});
+        const hint = document.querySelector('.gameover-hint');
+        if (hint) hint.textContent = '점수 업로드 중...';
+        Promise.resolve(window.leaderboardSubmitScore({ score, floor }))
+            .then(() => { if (hint) hint.textContent = '점수 업로드 완료'; })
+            .catch((e) => {
+                if (hint) hint.textContent = `점수 업로드 실패: ${String(e?.message || e)}`;
+            });
     }
 }
 
