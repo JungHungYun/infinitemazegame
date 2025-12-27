@@ -180,7 +180,9 @@ canvas {
 
 .title-controls {
     margin: 16px auto 18px;
-    width: min(560px, 100%);
+    /* 타이틀 레이아웃(좌/우 2컬럼)에서 겹침 방지: 좌측 컬럼 폭을 넘지 않게 */
+    width: 100%;
+    max-width: 520px;
     text-align: left;
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.08);
