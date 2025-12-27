@@ -123,22 +123,29 @@ async function leaderboardRefresh() {
     try {
         const root = document.getElementById('leaderboard');
         if (root) {
-            root.innerHTML = '<div class="lb-row muted">리더보드 로딩중... (v20251227_4)</div>';
+            root.innerHTML = '<div class="lb-row muted">리더보드 로딩중... (v20251227_5)</div>';
         }
     } catch (_) {}
 
     setLeaderboardMsg('리더보드 조회 중...');
 
     // 1) 우선 view 기반 (가장 빠름)
-    const { data, error } = await withTimeout(
-        sb
-            .from('leaderboard_view')
-            .select('rank,user_id,score,floor,display_name,updated_at')
-            .order('rank', { ascending: true })
-            .limit(10),
-        20000,
-        'leaderboard_view 조회'
-    );
+    let data, error;
+    try {
+        ({ data, error } = await withTimeout(
+            sb
+                .from('leaderboard_view')
+                .select('rank,user_id,score,floor,display_name,updated_at')
+                .order('rank', { ascending: true })
+                .limit(10),
+            20000,
+            'leaderboard_view 조회'
+        ));
+    } catch (err) {
+        setLeaderboardMsg(String(err?.message || err), true);
+        renderLeaderboardRows([]);
+        return;
+    }
 
     if (!error) {
         setLeaderboardMsg('');
