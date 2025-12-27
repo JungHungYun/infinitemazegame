@@ -177,6 +177,8 @@ const state = {
         lastTrailMs: 0,
         // 아이템 획득 시 플레이어 색 틴트(코인=노랑, 미사일=청록) 연출
         playerTint: { a: 0, r: 255, g: 210, b: 77 }, // a:0..1
+        // 점수 증감 표시 (플레이어 위에 뜨는 텍스트)
+        scorePopups: [], // [{x,y,value,isPositive,lifeMs,bornMs,velY}]
         // 마찰열 연출을 위한 상태
         wallRubHeatMs: 0,
         wallRubTargetMs: 5000,
@@ -1051,20 +1053,20 @@ function bossHitBloodFx(damage = 1) {
     const dmg = Math.max(1, Number(damage || 1));
     const mult = Math.max(0.6, Math.min(2.2, dmg / 5));
 
-    // 바닥에 낭자하게: 오래 남는 스플랫
+    // 바닥에 낭자하게: 오래 남는 스플랫 (3배 증가)
     addBloodSplatsMaze(8.5, 8.5, {
-        count: Math.round(8 * mult),
-        spread: 1.4,
-        rMin: 0.10,
-        rMax: 0.55,
-        alpha: 0.85,
+        count: Math.round(24 * mult), // 8 -> 24 (3배)
+        spread: 2.0, // 1.4 -> 2.0 (더 넓게)
+        rMin: 0.12,
+        rMax: 0.70, // 0.55 -> 0.70 (더 크게)
+        alpha: 0.90, // 0.85 -> 0.90 (더 진하게)
         lifeMs: 120000,
     });
 
-    // 즉시 튀는 피 파티클(짧게)
+    // 즉시 튀는 피 파티클(짧게) (3배 증가)
     fxBurstMaze(8.5, 8.5, {
         kind: 'dot',
-        count: Math.round(26 * mult),
+        count: Math.round(78 * mult), // 26 -> 78 (3배)
         color: 'rgba(170, 0, 0, 0.85)',
         lifeMs: 520,
         speed: 7.0,
@@ -1893,6 +1895,8 @@ function restartRun() {
     state.ui.runStartMs = state.nowMs;
     state.ui.maxFloorReached = 1;
     state.ui.bossKills = 0;
+    state.ui.scoreDisplayY = 30;
+    state.ui.lastScore = 0;
 
             updateUI();
 }
@@ -3665,14 +3669,41 @@ function getScoreMultiplierForFloor(floor) {
     return 2 ** Math.floor(floor / 10);
 }
 
+function addScorePopup(value, isPositive = true) {
+    if (!state.fx.scorePopups) state.fx.scorePopups = [];
+    state.fx.scorePopups.push({
+        x: state.player.mazePos.x,
+        y: state.player.mazePos.y,
+        value: value,
+        isPositive: isPositive,
+        lifeMs: 1500,
+        bornMs: state.nowMs,
+        velY: -0.08, // 위로 떠오르는 속도
+    });
+    // 최대 10개까지만 유지
+    if (state.fx.scorePopups.length > 10) {
+        state.fx.scorePopups.shift();
+    }
+}
+
 function addScore(base, floor = getFloor()) {
     const m = getScoreMultiplierForFloor(floor);
-    state.score = Math.max(0, state.score + base * m);
+    const actualGain = base * m;
+    state.score = Math.max(0, state.score + actualGain);
+    // 점수 증감 팝업 표시
+    if (actualGain > 0) {
+        addScorePopup(`+${Math.floor(actualGain)}`, true);
+    }
 }
 
 function subScore(base, floor = getFloor()) {
     const m = getScoreMultiplierForFloor(floor);
-    state.score = Math.max(0, state.score - base * m);
+    const actualLoss = base * m;
+    state.score = Math.max(0, state.score - actualLoss);
+    // 점수 감소 팝업 표시
+    if (actualLoss > 0) {
+        addScorePopup(`-${Math.floor(actualLoss)}`, false);
+    }
 }
 
 function checkExits() {
@@ -4003,6 +4034,60 @@ function drawHUD() {
         ctx.textAlign = 'center';
         ctx.fillText('BOSS HP', state.view.w/2, by + 11);
     }
+
+    // 12시 방향: 점수 표시 (화려한 이펙트)
+    ctx.save();
+    ctx.setTransform(state.view.dpr, 0, 0, state.view.dpr, 0, 0);
+    const scoreX = state.view.w / 2;
+    const scoreY = 30;
+    const score = Math.max(0, Math.floor(state.score ?? 0));
+    
+    // 점수 변화 애니메이션 (상승/하강)
+    if (!state.ui.scoreDisplayY) state.ui.scoreDisplayY = scoreY;
+    if (!state.ui.lastScore) state.ui.lastScore = score;
+    const scoreDiff = score - state.ui.lastScore;
+    if (Math.abs(scoreDiff) > 0.1) {
+        // 점수가 증가하면 위로, 감소하면 아래로
+        state.ui.scoreDisplayY = Math.max(scoreY - 15, Math.min(scoreY + 15, state.ui.scoreDisplayY - scoreDiff * 0.5));
+        state.ui.lastScore = score;
+    } else {
+        // 원래 위치로 복귀
+        const targetY = scoreY;
+        state.ui.scoreDisplayY += (targetY - state.ui.scoreDisplayY) * 0.15;
+    }
+    
+    // 배경 글로우 효과
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
+    
+    // 멋진 폰트로 점수 표시
+    ctx.font = 'bold 32px "Arial Black", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // 그라데이션 효과
+    const gradient = ctx.createLinearGradient(scoreX - 100, state.ui.scoreDisplayY - 20, scoreX + 100, state.ui.scoreDisplayY + 20);
+    gradient.addColorStop(0, '#FFD700'); // 금색
+    gradient.addColorStop(0.5, '#FFA500'); // 주황색
+    gradient.addColorStop(1, '#FF6347'); // 토마토색
+    ctx.fillStyle = gradient;
+    
+    // 외곽선
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(score.toLocaleString(), scoreX, state.ui.scoreDisplayY);
+    ctx.fillText(score.toLocaleString(), scoreX, state.ui.scoreDisplayY);
+    
+    // "SCORE" 레이블
+    ctx.font = 'bold 14px Arial';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeText('SCORE', scoreX, state.ui.scoreDisplayY - 25);
+    ctx.fillText('SCORE', scoreX, state.ui.scoreDisplayY - 25);
+    
+    ctx.shadowBlur = 0;
+    ctx.restore();
 }
 
 function drawMiniMap(x, y, w, h) {
@@ -4481,6 +4566,70 @@ function drawMaze() {
         { quality: 'mid', spin: 0.0016 }
     );
 
+    // 점수 증감 팝업 (플레이어 위에 표시)
+    if (state.fx.scorePopups?.length) {
+        ctx.save();
+        for (let i = state.fx.scorePopups.length - 1; i >= 0; i--) {
+            const popup = state.fx.scorePopups[i];
+            const age = state.nowMs - popup.bornMs;
+            if (age >= popup.lifeMs) {
+                state.fx.scorePopups.splice(i, 1);
+                continue;
+            }
+            
+            const t = age / popup.lifeMs;
+            const alpha = 1 - Math.pow(t, 2); // 빠르게 페이드아웃
+            const yOffset = -cellSize * 0.8 - (t * 60); // 위로 떠오름
+            const scale = 1 + (1 - t) * 0.3; // 시작 시 크게
+            
+            const px = offsetX + popup.x * cellSize;
+            const py = offsetY + popup.y * cellSize + yOffset;
+            
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(px, py);
+            ctx.scale(scale, scale);
+            
+            // 화려한 글로우 효과
+            ctx.shadowBlur = 25;
+            ctx.shadowColor = popup.isPositive 
+                ? 'rgba(255, 215, 0, 0.9)' 
+                : 'rgba(255, 50, 50, 0.9)';
+            
+            // 멋진 폰트
+            ctx.font = `bold ${28 * scale}px "Arial Black", Arial, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // 그라데이션
+            const gradient = ctx.createLinearGradient(-50, -15, 50, 15);
+            if (popup.isPositive) {
+                gradient.addColorStop(0, '#FFD700');
+                gradient.addColorStop(0.5, '#FFA500');
+                gradient.addColorStop(1, '#FF6347');
+            } else {
+                gradient.addColorStop(0, '#FF4444');
+                gradient.addColorStop(0.5, '#CC0000');
+                gradient.addColorStop(1, '#990000');
+            }
+            ctx.fillStyle = gradient;
+            
+            // 외곽선
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+            ctx.lineWidth = 4;
+            ctx.strokeText(popup.value, 0, 0);
+            ctx.fillText(popup.value, 0, 0);
+            
+            // 추가 파티클 효과 (글로우)
+            ctx.shadowBlur = 40;
+            ctx.globalAlpha = alpha * 0.3;
+            ctx.fillText(popup.value, 0, 0);
+            
+            ctx.restore();
+        }
+        ctx.restore();
+    }
+
     // 아이템 획득 시 플레이어 노란 틴트(서서히 사라짐)
     if (state.fx.playerTint?.a > 0.001) {
         const a = Math.max(0, Math.min(1, state.fx.playerTint.a));
@@ -4768,7 +4917,7 @@ function drawMaze() {
         const ang = Math.atan2(vy, vx);
         const imgReady = !!(CHASER_MISSILE_IMG && CHASER_MISSILE_IMG.complete && CHASER_MISSILE_IMG.naturalWidth > 0);
         if (imgReady) {
-            const size = cellSize * 0.65;
+            const size = cellSize * 1.95; // 0.65 * 3 = 1.95 (3배 증가)
             ctx.save();
             ctx.translate(px, py);
             ctx.rotate(ang);
@@ -4783,7 +4932,7 @@ function drawMaze() {
         ctx.shadowBlur = 10;
         ctx.shadowColor = 'red';
         ctx.beginPath();
-        ctx.arc(px, py, 4, 0, Math.PI * 2);
+        ctx.arc(px, py, 12, 0, Math.PI * 2); // 4 * 3 = 12 (3배 증가)
         ctx.fill();
         ctx.restore();
         }
