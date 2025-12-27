@@ -16,6 +16,7 @@ create table if not exists public.leaderboard_best (
   user_id uuid primary key references auth.users(id) on delete cascade,
   score int not null default 0,
   floor int not null default 1,
+  platform text not null default 'pc',
   updated_at timestamptz not null default now()
 );
 
@@ -25,6 +26,7 @@ create table if not exists public.leaderboard_scores (
   user_id uuid not null references auth.users(id) on delete cascade,
   score int not null default 0,
   floor int not null default 1,
+  platform text not null default 'pc',
   created_at timestamptz not null default now()
 );
 
@@ -63,6 +65,7 @@ select
   lb.user_id,
   lb.score,
   lb.floor,
+  lb.platform,
   lb.updated_at,
   coalesce(
     p.username,
@@ -76,7 +79,8 @@ left join public.profiles p
 grant select on public.leaderboard_view to anon, authenticated;
 
 -- ===== 3) 점수 제출 RPC (조건부 업서트) =====
-create or replace function public.submit_score(p_score int, p_floor int)
+-- v2: 플랫폼(pc/mobile)도 함께 저장
+create or replace function public.submit_score_v2(p_score int, p_floor int, p_platform text)
 returns void
 language plpgsql
 security definer
@@ -86,21 +90,27 @@ declare
   uid uuid := auth.uid();
   s int := greatest(0, coalesce(p_score, 0));
   f int := greatest(1, coalesce(p_floor, 1));
+  plat text := lower(coalesce(nullif(trim(p_platform), ''), 'pc'));
 begin
   if uid is null then
     raise exception 'not authenticated';
   end if;
+  if plat not in ('pc','mobile') then
+    plat := 'pc';
+  end if;
 
   -- 0) 누적 기록은 항상 저장
-  insert into public.leaderboard_scores(user_id, score, floor, created_at)
-  values (uid, s, f, now());
+  insert into public.leaderboard_scores(user_id, score, floor, platform, created_at)
+  values (uid, s, f, plat, now());
 
-  insert into public.leaderboard_best(user_id, score, floor, updated_at)
-  values (uid, s, f, now())
+  -- 1) 최고 기록(best) 갱신
+  insert into public.leaderboard_best(user_id, score, floor, platform, updated_at)
+  values (uid, s, f, plat, now())
   on conflict (user_id) do update
   set
     score = excluded.score,
     floor = excluded.floor,
+    platform = excluded.platform,
     updated_at = now()
   where
     excluded.score > public.leaderboard_best.score
@@ -148,8 +158,8 @@ to authenticated
 with check (auth.uid() = user_id);
 
 -- ===== 6) RPC 권한 =====
-revoke all on function public.submit_score(int, int) from public;
-grant execute on function public.submit_score(int, int) to authenticated;
+revoke all on function public.submit_score_v2(int, int, text) from public;
+grant execute on function public.submit_score_v2(int, int, text) to authenticated;
 
 -- ===== 7) PostgREST 스키마 캐시 갱신 =====
 -- SQL 실행 직후에도 supabase-js에서 "schema cache" 오류가 나면 아래를 추가로 실행하세요.

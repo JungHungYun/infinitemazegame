@@ -146,6 +146,8 @@ const state = {
         slowUntilMs: 0, // 강화 화약 슬로우 효과
         deadUntilNextChunk: false, // 살상 미사일에 의해 파괴됨
         respawnTimerMs: 0,
+        // 보스전 종료 직후 스폰/미사일 난사 방지용 쿨다운
+        bossCooldownUntilMs: 0,
     },
     chaserProjectiles: [], // {pos, vel}
 
@@ -2687,6 +2689,8 @@ function updateChaser(dt) {
     if (!state.chaser.active) return;
     // 보스전 중에는 추격자 미사일/로직 자체를 진행하지 않음
     if (state.boss.active) return;
+    // 보스전 직후엔 일정 시간 추격자/미사일 등장 금지
+    if (state.chaser.bossCooldownUntilMs && state.nowMs < state.chaser.bossCooldownUntilMs) return;
     // 추격자는 플레이어와 같은 청크에 있다고 가정(청크 넘어갈 때 함께 진입)
     const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
     const maze = chunk.maze;
@@ -3130,6 +3134,16 @@ function onMissileHitTarget(m) {
             const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
             if (chunk) chunk.cleared = true;
             addScore(1000, getFloor());
+
+            // 보스방 종료 직후 추격자/추격자 미사일이 튀어나오는 현상 방지:
+            // - 기존 발사체 제거
+            // - 최소 5초 쿨다운 부여(다음 층 진입/상점 표시 구간 포함)
+            state.chaserProjectiles = [];
+            state.chaser.isPresentInMaze = false;
+            state.chaser.lastShotMs = state.nowMs;
+            state.chaser.bossCooldownUntilMs = state.nowMs + 5000;
+            // entryScheduledUntilMs가 과거로 남아있으면 즉시 등장하므로, 쿨다운 이후로 밀어둠
+            state.chaser.entryScheduledUntilMs = state.chaser.bossCooldownUntilMs;
 
             // 보스 클리어 후 다음 층(North)으로 자동 이동 예약
             const nextX = state.currentChunk.x;

@@ -33,7 +33,9 @@ function renderLeaderboardRows(rows) {
 
         const name = document.createElement('div');
         name.className = 'lb-name';
-        name.textContent = r.display_name || '(no name)';
+        const plat = String(r.platform || '').toLowerCase();
+        const badge = (plat === 'mobile') ? 'M' : (plat === 'pc' ? 'PC' : '');
+        name.textContent = (r.display_name || '(no name)') + (badge ? ` [${badge}]` : '');
 
         const score = document.createElement('div');
         score.className = 'lb-score';
@@ -135,7 +137,7 @@ async function leaderboardRefresh() {
         ({ data, error } = await withTimeout(
             sb
                 .from('leaderboard_view')
-                .select('rank,user_id,score,floor,display_name,updated_at')
+                .select('rank,user_id,score,floor,platform,display_name,updated_at')
                 .order('rank', { ascending: true })
                 .limit(10),
             20000,
@@ -158,6 +160,7 @@ async function leaderboardRefresh() {
             user_id: r.user_id,
             score: r.score,
             floor: r.floor,
+            platform: r.platform || '',
             display_name: r.display_name || '익명',
             updated_at: r.updated_at,
         }));
@@ -172,7 +175,7 @@ async function leaderboardRefresh() {
         const { data: myRow, error: myErr } = await withTimeout(
             sb
                 .from('leaderboard_view')
-                .select('rank,user_id,score,floor,display_name,updated_at')
+                .select('rank,user_id,score,floor,platform,display_name,updated_at')
                 .eq('user_id', myId)
                 .maybeSingle(),
             20000,
@@ -253,12 +256,31 @@ async function leaderboardSubmitScore({ score, floor }) {
     const s = Math.max(0, Math.floor(score ?? 0));
     const f = Math.max(1, Math.floor(floor ?? 1));
 
-    // 누적 기록 + 최고점(best) 업데이트: RPC로 처리
-    const { error } = await sb.rpc('submit_score', { p_score: s, p_floor: f });
+    const platform = (typeof state !== 'undefined' && state?.ui?.isMobile) ? 'mobile' : 'pc';
+
+    // 누적 기록 + 최고점(best) 업데이트: RPC(v2) 우선 시도, 없으면 기존 submit_score로 폴백
+    let error = null;
+    try {
+        const res = await sb.rpc('submit_score_v2', { p_score: s, p_floor: f, p_platform: platform });
+        error = res?.error || null;
+    } catch (e) {
+        error = e;
+    }
     if (error) {
-        console.error('[leaderboard] submit_score failed', error);
-        setLeaderboardMsg(error.message, true);
-        throw error;
+        const msg = String(error?.message || error);
+        const isMissingFn = msg.includes('submit_score_v2') && (msg.includes('does not exist') || msg.includes('function'));
+        if (isMissingFn) {
+            const res2 = await sb.rpc('submit_score', { p_score: s, p_floor: f });
+            if (res2?.error) {
+                console.error('[leaderboard] submit_score failed', res2.error);
+                setLeaderboardMsg(res2.error.message, true);
+                throw res2.error;
+            }
+        } else {
+            console.error('[leaderboard] submit_score_v2 failed', error);
+            setLeaderboardMsg(msg, true);
+            throw error;
+        }
     }
 
     // 업로드 후 새로고침
