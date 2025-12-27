@@ -45,7 +45,7 @@ const ABILITY_DEFS = [
     {
         id: 'bank_deposit',
         name: '예금',
-        desc: '10초에 한번 1코인 획득. 획득할 때마다 -0.25초(최대 -9초, 최소 1초).',
+        desc: '일정 시간마다 자동으로 코인을 획득합니다. 초기 간격은 10초이며, 코인을 받을 때마다 간격이 0.25초씩 감소합니다. 최소 간격은 1초까지 가능하며, 최대 9초까지 단축됩니다. 게임이 진행되는 동안 지속적으로 작동합니다.',
         rarity: 'RARE',
         cost: 5,
         noExtraCost: true,
@@ -59,7 +59,7 @@ const ABILITY_DEFS = [
     {
         id: 'bank_saving',
         name: '적금',
-        desc: '다섯개 층 통과할 때마다 이자 10코인. 획득할 때마다 필요 층수 -1(최소 1층).',
+        desc: '특정 층수를 통과할 때마다 이자로 10코인을 획득합니다. 초기에는 5층마다 지급되며, 이자를 받을 때마다 필요 층수가 1층씩 감소합니다. 최소 1층마다 지급되며, 계속 획득할수록 더 자주 받을 수 있습니다.',
         rarity: 'EPIC',
         cost: 20,
         noExtraCost: true,
@@ -73,7 +73,7 @@ const ABILITY_DEFS = [
     {
         id: 'living_loan',
         name: '생활비 대출',
-        desc: '즉시 +20코인. 5개 층 통과 이후 5초당 1코인 상환. 코인이 음수면 1초당 추가 상환액 +1 증가.',
+        desc: '즉시 20코인을 받지만, 이후 상환해야 합니다. 5개 층을 통과한 후부터 5초마다 1코인씩 자동 상환됩니다. 만약 코인이 음수가 되면 패널티가 발생하여 1초마다 추가 상환액이 1씩 증가하며, 그만큼 더 많이 상환해야 합니다. 위험하지만 즉시 자금이 필요한 상황에 유용합니다.',
         rarity: 'EPIC',
         cost: -20, // 보너스(코인 지급)
         noExtraCost: true,
@@ -88,7 +88,7 @@ const ABILITY_DEFS = [
     {
         id: 'life_loan',
         name: '생명담보대출',
-        desc: '즉시 +50코인. 목숨 2개 즉시 소모. 목숨이 0 이하가 되면 게임 오버.',
+        desc: '즉시 50코인을 받지만, 목숨 2개를 즉시 소모합니다. 목숨이 0 이하가 되면 즉시 게임 오버됩니다. 매우 위험한 거래이지만 큰 자금이 필요할 때 사용할 수 있습니다. 목숨이 충분할 때만 고려하세요.',
         rarity: 'EPIC',
         cost: -50, // 보너스(코인 지급)
         noExtraCost: true,
@@ -105,7 +105,7 @@ const ABILITY_DEFS = [
     {
         id: 'small_luck',
         name: '작은 행운',
-        desc: '즉시 +5코인.',
+        desc: '즉시 5코인을 획득합니다. 추가 효과는 없지만 즉시 사용 가능한 자금을 제공합니다.',
         rarity: 'COMMON',
         cost: -5, // 보너스(코인 지급)
         noExtraCost: true,
@@ -115,7 +115,7 @@ const ABILITY_DEFS = [
     {
         id: 'free_ticket',
         name: '무료 티켓',
-        desc: '리롤 비용을 3회 무료로 만듭니다. 무료 소진 후엔 구매 직전 리롤 비용으로 되돌립니다.',
+        desc: '어빌리티 리롤을 3회 무료로 사용할 수 있는 티켓을 획득합니다. 티켓은 다음 상점에서도 사용할 수 있으며, 무료 티켓을 모두 사용하면 리롤 비용이 구매 직전 상태로 복구됩니다. 리롤 비용이 계속 증가하는 상황에서 유용합니다.',
         rarity: 'COMMON',
         cost: 3,
         noExtraCost: true,
@@ -134,7 +134,7 @@ const ABILITY_DEFS = [
     {
         id: 'wall_break_speed',
         name: '벽부수기 속도 +10%',
-        desc: `벽을 더 빠르게 부숩니다. (MAX x${CONFIG.MAX_WALL_BREAK_SPEED_MULT})`,
+        desc: `벽을 문대는 속도가 10% 증가합니다. 벽을 부수는 데 걸리는 시간이 줄어들어 더 빠르게 진행할 수 있습니다. 최대 ${CONFIG.MAX_WALL_BREAK_SPEED_MULT}배까지 강화 가능하며, 벽부수기 능력을 먼저 획득해야 합니다.`,
         rarity: 'RARE',
         cost: 5,
         // 예전에는 wallBreakUnlocked가 false면 "아예 뽑히지 않아서" 누락처럼 보였음.
@@ -149,7 +149,7 @@ const ABILITY_DEFS = [
     {
         id: 'missile_spawn',
         name: '미사일 아이템 확률 +5%',
-        desc: `미사일 아이템 등장 확률이 5% 증가합니다. (MAX x${CONFIG.MAX_MISSILE_SPAWN_CHANCE_MULT})`,
+        desc: `필드에 미사일 아이템이 등장할 확률이 5% 증가합니다. 미사일을 더 자주 획득할 수 있어 전투력이 향상됩니다. 최대 ${CONFIG.MAX_MISSILE_SPAWN_CHANCE_MULT}배까지 강화 가능합니다.`,
         rarity: 'COMMON',
         cost: 3,
         available: () => state.abilities.missileSpawnChanceMult < CONFIG.MAX_MISSILE_SPAWN_CHANCE_MULT,
@@ -160,7 +160,7 @@ const ABILITY_DEFS = [
     {
         id: 'coin_field_spawn',
         name: '코인 확률 증가',
-        desc: '필드 내 코인 등장 확률 증가(+15%). 최대 코인 개수도 증가합니다. (최대 20회)',
+        desc: '각 청크(맵)에 코인이 등장할 확률이 15% 증가하고, 동시에 등장할 수 있는 최대 코인 개수도 증가합니다. 최대 20회까지 강화 가능하며, 코인 수집이 더 쉬워집니다.',
         rarity: 'RARE',
         cost: 5,
         available: () => (state.abilities.coinFieldSpawnBonus ?? 0) < 3.0,
@@ -171,7 +171,7 @@ const ABILITY_DEFS = [
     {
         id: 'missile_field_spawn',
         name: '미사일 확률 증가',
-        desc: '필드 내 미사일 아이템 등장 확률 +2.5% (최대 +100%). 최초 획득 시 필드 내 최대 5개까지 등장.',
+        desc: '필드에 미사일 아이템이 등장할 확률이 2.5% 증가합니다. 최대 100%까지 강화 가능하며, 최초 획득 시 한 청크에 동시에 등장할 수 있는 미사일 최대 개수가 5개로 증가합니다. 미사일을 더 많이 수집할 수 있습니다.',
         rarity: 'EPIC',
         cost: 15,
         available: () => (state.abilities.missileFieldSpawnBonus ?? 0) < 1.0,
@@ -184,7 +184,7 @@ const ABILITY_DEFS = [
     {
         id: 'missile_stun',
         name: '미사일 스턴 +0.2초',
-        desc: '미사일로 기절시키는 시간이 0.2초 증가합니다. (Max 5초)',
+        desc: '미사일로 추격자를 맞췄을 때 기절시키는 시간이 0.2초 증가합니다. 추격자가 더 오래 멈춰있어 도망치거나 전략을 세우기 쉬워집니다. 최대 5초까지 강화 가능합니다.',
         rarity: 'COMMON',
         cost: 3,
         available: () => state.abilities.missileStunBonusMs < CONFIG.MAX_MISSILE_STUN_BONUS_MS,
@@ -195,7 +195,7 @@ const ABILITY_DEFS = [
     {
         id: 'missile_count',
         name: '미사일 투사체 +1',
-        desc: '미사일 발사 시 투사체 개수가 1개 늘어납니다. (Max 5개)',
+        desc: '미사일을 발사할 때 한 번에 나가는 투사체 개수가 1개 증가합니다. 여러 개의 미사일을 동시에 발사하여 더 강력한 공격이 가능합니다. 최대 5개까지 발사할 수 있습니다.',
         rarity: 'EPIC',
         cost: 15,
         available: () => state.abilities.missileCount < CONFIG.MAX_MISSILE_COUNT,
@@ -206,7 +206,7 @@ const ABILITY_DEFS = [
     {
         id: 'move_speed',
         name: '이동속도 +2.5%',
-        desc: `이동 속도가 2.5% 증가합니다. (MAX x${CONFIG.MAX_MOVE_SPEED_MULT})`,
+        desc: `플레이어의 이동 속도가 2.5% 영구적으로 증가합니다. 추격자로부터 도망치거나 맵을 빠르게 탐색하는 데 유용합니다. 최대 ${CONFIG.MAX_MOVE_SPEED_MULT}배까지 강화 가능합니다.`,
         rarity: 'COMMON',
         cost: 3,
         available: () => state.abilities.moveSpeedMult < CONFIG.MAX_MOVE_SPEED_MULT,
@@ -217,7 +217,7 @@ const ABILITY_DEFS = [
     {
         id: 'gold_wall',
         name: '코인 벽',
-        desc: '코인이 포함된 벽이 생성될 확률 + 1% (MIN 10%, MAX 25%)',
+        desc: '일반 벽 대신 코인이 포함된 특수 벽(사금벽)이 생성될 확률이 1% 증가합니다. 사금벽을 부수면 코인을 획득할 수 있습니다. 최초 획득 시 10% 확률로 시작하며, 최대 25%까지 강화 가능합니다.',
         rarity: 'EPIC',
         cost: 10,
         available: () => !state.abilities.goldWallUnlocked || state.abilities.goldWallProb < 0.25,
@@ -234,7 +234,7 @@ const ABILITY_DEFS = [
     {
         id: 'coin_wall_coin_plus',
         name: '코인 벽 코인 +1',
-        desc: '코인 벽(사금벽) 파괴 시 코인 획득량 +1 (기본 5에서 증가)',
+        desc: '사금벽을 파괴했을 때 획득하는 코인 양이 1개 증가합니다. 기본적으로 5코인을 주지만, 이 어빌리티를 획득하면 6코인, 7코인...으로 계속 증가합니다. 코인 벽 어빌리티를 먼저 획득해야 합니다.',
         rarity: 'COMMON',
         cost: 3,
         available: () => true,
@@ -247,7 +247,7 @@ const ABILITY_DEFS = [
     {
         id: 'coin_gain_plus',
         name: '코인 획득량 +1',
-        desc: '코인을 얻을 때마다 추가로 +1을 더 획득합니다.',
+        desc: '필드에서 코인을 획득할 때마다 추가로 1코인을 더 받습니다. 모든 코인 획득에 적용되므로 코인 수집 효율이 크게 향상됩니다. 중첩 가능합니다.',
         rarity: 'COMMON',
         cost: 3,
         available: () => true,
@@ -258,7 +258,7 @@ const ABILITY_DEFS = [
     {
         id: 'missile_wall_break',
         name: '벽파괴 미사일',
-        desc: '미사일이 벽에 부딪힐 때 일정 확률로 벽을 파괴합니다.',
+        desc: '미사일이 벽에 부딪혔을 때 일정 확률로 벽을 즉시 파괴합니다. 최초 획득 시 10% 확률로 시작하며, 이후 획득할 때마다 확률이 1%씩 증가합니다. 미사일로 벽을 부수면서 진행할 수 있어 전략적 유연성이 증가합니다.',
         rarity: 'EPIC',
         cost: 20,
         available: () => true,
@@ -273,7 +273,7 @@ const ABILITY_DEFS = [
     {
         id: 'talisman',
         name: '부적',
-        desc: '일반 확률 -6%, 희귀+3%, 영웅+2.5%, 전설+0.5% 증가 (최대 3회)',
+        desc: '어빌리티 선택창에서 고급 어빌리티가 나올 확률을 조정합니다. 일반 어빌리티 확률이 6% 감소하고, 희귀 +3%, 영웅 +2.5%, 전설 +0.5% 증가합니다. 최대 3회까지 획득 가능하며, 더 강력한 어빌리티를 얻을 기회가 늘어납니다.',
         rarity: 'LEGENDARY',
         cost: 20,
         available: () => state.abilities.talismanCount < 3,
@@ -288,7 +288,7 @@ const ABILITY_DEFS = [
     {
         id: 'shop_slot',
         name: '상점 슬롯 +1',
-        desc: '어빌리티 선택창의 슬롯이 1개 증가합니다. (최대 6개)',
+        desc: '어빌리티 선택창에서 한 번에 볼 수 있는 어빌리티 개수가 1개 증가합니다. 더 많은 선택지 중에서 원하는 어빌리티를 고를 수 있어 전략의 폭이 넓어집니다. 최대 6개까지 증가 가능합니다.',
         rarity: 'LEGENDARY',
         cost: 30,
         available: () => state.abilities.shopSlots < CONFIG.MAX_SHOP_SLOTS,
@@ -299,7 +299,7 @@ const ABILITY_DEFS = [
     {
         id: 'missile_gunpowder',
         name: '화약 벽 (강화 화약)',
-        desc: '벽을 부수면 강화 화약을 얻을 확률이 증가합니다. (MIN 10%, MAX 20%)',
+        desc: '벽을 부수면 강화 화약을 얻을 확률이 증가합니다. 강화 화약을 사용한 미사일은 더 강한 데미지와 슬로우 효과를 가집니다. 최초 획득 시 10% 확률로 시작하며, 최대 20%까지 강화 가능합니다. 벽에 작은 점으로 표시됩니다.',
         rarity: 'RARE',
         cost: 5,
         available: () => (state.abilities.missileGunpowderProb ?? 0) < 0.20,
@@ -314,7 +314,7 @@ const ABILITY_DEFS = [
     {
         id: 'weaken_wall_common',
         name: '일반 벽 약화',
-        desc: '갈색/파랑/녹색 벽 내구도 2% 감소 (최대 50%까지)',
+        desc: '갈색, 파랑, 녹색 벽의 내구도가 2% 영구적으로 감소합니다. 벽을 부수는 데 걸리는 시간이 줄어들어 더 빠르게 진행할 수 있습니다. 중첩 가능하며, 최대 50%까지 감소시킬 수 있습니다.',
         rarity: 'COMMON',
         cost: 3,
         available: () => true,
@@ -325,7 +325,7 @@ const ABILITY_DEFS = [
     {
         id: 'weaken_wall_rare',
         name: '희귀 벽 약화',
-        desc: '보라/노랑/주황 벽 내구도 2% 감소 (최대 50%까지)',
+        desc: '보라색, 노랑색, 주황색 벽의 내구도가 2% 영구적으로 감소합니다. 중간 단계 벽들을 더 쉽게 부술 수 있어 진행 속도가 향상됩니다. 중첩 가능하며, 최대 50%까지 감소시킬 수 있습니다.',
         rarity: 'RARE',
         cost: 5,
         available: () => true,
@@ -336,7 +336,7 @@ const ABILITY_DEFS = [
     {
         id: 'weaken_wall_epic',
         name: '영웅 벽 약화',
-        desc: '회색/흰색 벽 내구도 2% 감소 (최대 50%까지)',
+        desc: '회색, 흰색 벽의 내구도가 2% 영구적으로 감소합니다. 고급 벽들을 더 빠르게 부술 수 있어 후반 진행이 수월해집니다. 중첩 가능하며, 최대 50%까지 감소시킬 수 있습니다.',
         rarity: 'EPIC',
         cost: 15,
         available: () => true,
@@ -347,7 +347,7 @@ const ABILITY_DEFS = [
     {
         id: 'weaken_wall_legendary',
         name: '전설 벽 약화',
-        desc: '검정(레벨) 벽 내구도 2% 감소 (최대 50%까지)',
+        desc: '검정색 벽의 내구도가 2% 영구적으로 감소합니다. 가장 강한 벽을 더 쉽게 부술 수 있어 최고층 진행이 가능해집니다. 중첩 가능하며, 최대 50%까지 감소시킬 수 있습니다.',
         rarity: 'LEGENDARY',
         cost: 30,
         available: () => true,
@@ -358,7 +358,7 @@ const ABILITY_DEFS = [
     {
         id: 'gain_life',
         name: '목숨 +1',
-        desc: '하트를 1개 회복합니다.',
+        desc: '현재 목숨을 1개 회복합니다. 최대 목숨 수를 초과할 수 없으며, 이미 최대치라면 구매할 수 없습니다. 위험한 상황에서 생존력을 높이는 데 유용합니다.',
         rarity: 'COMMON',
         cost: 1,
         available: () => state.player.lives < state.abilities.maxLives, // 최대 체력이면 구매 불가
@@ -369,7 +369,7 @@ const ABILITY_DEFS = [
     {
         id: 'max_lives',
         name: '최대 목숨 증가 +1',
-        desc: '최대 하트 개수가 1개 늘어납니다. (최대 10회)',
+        desc: '최대 목숨(하트) 개수가 1개 영구적으로 증가하고, 현재 목숨도 1개 회복됩니다. 기본 3개에서 시작하여 최대 10회까지 강화 가능하며, 총 13개까지 늘릴 수 있습니다. 생존력이 크게 향상됩니다.',
         rarity: 'EPIC',
         cost: 20,
         available: () => (state.abilities.maxLives - 3) < 10,
@@ -381,7 +381,7 @@ const ABILITY_DEFS = [
     {
         id: 'lethal_missile',
         name: '살상 미사일',
-        desc: '미사일이 추격자를 파괴할 수 있습니다. (다음 맵에서 무작위 부활)',
+        desc: '미사일로 추격자를 맞추면 추격자를 일시적으로 파괴할 수 있습니다. 파괴된 추격자는 다음 청크(맵)로 이동할 때 무작위 위치에서 부활합니다. 추격자로부터 안전하게 도망칠 시간을 벌 수 있는 강력한 능력입니다.',
         rarity: 'LEGENDARY',
         cost: 30,
         available: () => !state.abilities.killMissileUnlocked,
@@ -392,7 +392,7 @@ const ABILITY_DEFS = [
     {
         id: 'shield',
         name: '실드',
-        desc: '1회 피격 무효. 피격 후 1초 무적. 다음 청크로 넘어가면 최대치로 재충전됩니다. (최대 3개)',
+        desc: '피격을 1회 무효화하는 실드를 획득합니다. 실드가 피격을 막으면 1초간 무적 상태가 됩니다. 다음 청크로 넘어가면 실드가 최대치로 자동 재충전됩니다. 최대 3개까지 보유할 수 있으며, 구매 시 즉시 1개가 지급됩니다.',
         rarity: 'LEGENDARY',
         cost: 50,
         available: () => (state.abilities.shieldMax ?? 0) < 3,
@@ -405,7 +405,7 @@ const ABILITY_DEFS = [
     {
         id: 'heart_drop',
         name: '하트 드롭',
-        desc: '필드에 낮은 확률로 하트가 드롭됩니다. 획득 시 최대 체력까지 회복. (0.1%p씩 증가, 최대 10%)',
+        desc: '필드에 하트 아이템이 드롭될 확률이 0.1% 증가합니다. 하트를 획득하면 최대 체력까지 완전히 회복됩니다. 최대 10%까지 강화 가능하며, 생존에 큰 도움이 됩니다. 각 청크에서 낮은 확률로 하트가 등장합니다.',
         rarity: 'LEGENDARY',
         cost: 50,
         available: () => (state.abilities.heartDropChance ?? 0) < 0.10,
