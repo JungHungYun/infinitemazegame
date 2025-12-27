@@ -9,6 +9,7 @@ const ctx = canvas.getContext('2d');
 const CHASER_IMG = new Image();
 const MISSILE_IMG = new Image();         // 플레이어 미사일
 const CHASER_MISSILE_IMG = new Image();  // 추격자 미사일
+const BOSS_IMG = new Image();            // 보스 이미지
 
 function loadImageWithDebug(img, url, label) {
     return new Promise((resolve, reject) => {
@@ -51,6 +52,7 @@ async function preloadGameImages() {
             loadImageWithDebug(CHASER_IMG, 'resource/imgage/chaser.png', '추격자 이미지'),
             loadImageWithDebug(MISSILE_IMG, 'resource/imgage/misslie.png', '플레이어 미사일 이미지'),
             loadImageWithDebug(CHASER_MISSILE_IMG, 'resource/imgage/chaser_misslie.png', '추격자 미사일 이미지'),
+            loadImageWithDebug(BOSS_IMG, 'resource/imgage/boss.png', '보스 이미지'),
         ]);
         GAME_IMG_READY = true;
         GAME_IMG_ERROR = '';
@@ -168,6 +170,8 @@ const state = {
     fx: {
         // 파티클은 "미로 좌표계(셀 단위)"로 저장하고 drawMaze에서 화면 좌표로 변환해 렌더
         particles: [],
+        // 보스 피격 혈흔(바닥에 남는 데칼)
+        bloodSplats: [], // [{x,y,r,rx,ry,rot,a,bornMs,lifeMs}]
         shake: { amp: 0, t: 0 },
         flash: { a: 0 },
         lastTrailMs: 0,
@@ -1003,6 +1007,84 @@ function fxBurstMaze(x, y, opts = {}) {
     }
 }
 
+function addBloodSplatsMaze(x, y, opts = {}) {
+    const {
+        count = 10,
+        spread = 1.2,
+        rMin = 0.10,
+        rMax = 0.42,
+        alpha = 0.75,
+        lifeMs = 90000,
+    } = opts;
+    if (!state.fx.bloodSplats) state.fx.bloodSplats = [];
+
+    for (let i = 0; i < count; i++) {
+        const ox = (Math.random() * 2 - 1) * spread;
+        const oy = (Math.random() * 2 - 1) * spread;
+        const r = rMin + Math.random() * (rMax - rMin);
+        const rx = 0.6 + Math.random() * 1.0;
+        const ry = 0.6 + Math.random() * 1.0;
+        const rot = Math.random() * Math.PI * 2;
+        const a = Math.max(0.15, Math.min(0.95, alpha * (0.6 + Math.random() * 0.7)));
+        state.fx.bloodSplats.push({
+            x: x + ox,
+            y: y + oy,
+            r,
+            rx,
+            ry,
+            rot,
+            a,
+            bornMs: state.nowMs,
+            lifeMs,
+        });
+    }
+
+    // 과도한 누적 방지(모바일에서도 안전)
+    const max = state.ui?.isMobile ? 80 : 160;
+    if (state.fx.bloodSplats.length > max) {
+        state.fx.bloodSplats.splice(0, state.fx.bloodSplats.length - max);
+    }
+}
+
+function bossHitBloodFx(damage = 1) {
+    // 튀는 피(파티클) + 바닥 혈흔(데칼)
+    const dmg = Math.max(1, Number(damage || 1));
+    const mult = Math.max(0.6, Math.min(2.2, dmg / 5));
+
+    // 바닥에 낭자하게: 오래 남는 스플랫
+    addBloodSplatsMaze(8.5, 8.5, {
+        count: Math.round(8 * mult),
+        spread: 1.4,
+        rMin: 0.10,
+        rMax: 0.55,
+        alpha: 0.85,
+        lifeMs: 120000,
+    });
+
+    // 즉시 튀는 피 파티클(짧게)
+    fxBurstMaze(8.5, 8.5, {
+        kind: 'dot',
+        count: Math.round(26 * mult),
+        color: 'rgba(170, 0, 0, 0.85)',
+        lifeMs: 520,
+        speed: 7.0,
+        size: 0.06,
+        drag: 0.90,
+        glow: 8,
+    });
+    fxBurstMaze(8.5, 8.5, {
+        kind: 'spark',
+        count: Math.round(18 * mult),
+        color: 'rgba(255, 40, 40, 0.75)',
+        lifeMs: 420,
+        speed: 11.0,
+        size: 0.02,
+        len: 1.8,
+        drag: 0.84,
+        glow: 18,
+    });
+}
+
 function fxShake(amp) {
     state.fx.shake.amp = Math.max(state.fx.shake.amp, amp * CONFIG.FX_SCALE);
     state.fx.shake.t = rand(0, 1000);
@@ -1257,6 +1339,8 @@ function applyPlayerHit({ livesLoss = 1, canUseShield = true, flashA = 0.25, fla
     if (isPlayerInvincible()) return { applied: false, blockedBy: 'invincible' };
     if (canUseShield && tryConsumeShield()) return { applied: false, blockedBy: 'shield' };
     state.player.lives = Math.max(0, (state.player.lives || 0) - livesLoss);
+    // 데미지가 실제로 적용되었을 때 무적 시간 설정 (연속 피격 방지)
+    state.player.invincibleUntilMs = state.nowMs + 1000; // 1초 무적
     fxFlash(flashA, flashColor);
     fxShake(shake);
     if (sfx) playSfx(sfx, { volume: 0.9 });
@@ -1752,6 +1836,7 @@ function restartRun() {
     // FX 초기화(모바일 최적화 유지)
     state.fx = {
         particles: [],
+        bloodSplats: [],
         shake: { amp: 0, t: 0 },
         flash: { a: 0, color: '#fff' },
         lastTrailMs: 0,
@@ -2116,6 +2201,8 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
     state.pendingMissileShots = [];
     // 보스 패턴(레이저)도 맵 전환 시 초기화
     state.boss.lasers = [];
+    // 보스 혈흔은 청크(맵) 이동 시 정리
+    if (state.fx?.bloodSplats) state.fx.bloodSplats = [];
 
     // 추격자 부활 로직 (살상 미사일에 의해 파괴된 경우)
     if (state.chaser.active && state.chaser.deadUntilNextChunk) {
@@ -3288,6 +3375,8 @@ function onMissileHitTarget(m) {
     
     if (state.boss.active) {
         state.boss.hp -= damage;
+        // 보스 타격 시 피가 튀고, 바닥에 낭자하게 남김
+        bossHitBloodFx(damage);
         if (state.boss.hp <= 0) {
             state.boss.active = false;
             state.boss.lasers = []; // 레이저 즉시 제거
@@ -4283,6 +4372,45 @@ function drawMaze() {
         }
     }
 
+    // 보스 피격 혈흔(바닥 데칼) - 벽 위/파티클 아래 레이어
+    if (state.fx?.bloodSplats?.length) {
+        ctx.save();
+        // 피 얼룩은 바닥에 스며든 느낌이 좋으므로 multiply 계열로 어둡게
+        ctx.globalCompositeOperation = 'multiply';
+        for (let i = state.fx.bloodSplats.length - 1; i >= 0; i--) {
+            const s = state.fx.bloodSplats[i];
+            const age = state.nowMs - (s.bornMs || 0);
+            const life = Math.max(1, s.lifeMs || 90000);
+            if (age >= life) {
+                state.fx.bloodSplats.splice(i, 1);
+                continue;
+            }
+            const t = 1 - Math.max(0, Math.min(1, age / life));
+            const a = (s.a ?? 0.7) * (0.35 + 0.65 * t);
+
+            const px = offsetX + s.x * cellSize;
+            const py = offsetY + s.y * cellSize;
+            const rr = (s.r ?? 0.25) * cellSize;
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate(s.rot || 0);
+            ctx.scale(s.rx || 1, s.ry || 1);
+            ctx.globalAlpha = a;
+
+            const g = ctx.createRadialGradient(0, 0, rr * 0.12, 0, 0, rr);
+            g.addColorStop(0, 'rgba(120, 0, 0, 0.90)');
+            g.addColorStop(0.55, 'rgba(140, 0, 0, 0.45)');
+            g.addColorStop(1, 'rgba(120, 0, 0, 0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(0, 0, rr, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.restore();
+    }
+
     // 파티클 렌더(벽 위/플레이어 아래 레이어)
     if (state.fx.particles.length) {
         ctx.save();
@@ -4462,21 +4590,36 @@ function drawMaze() {
         const cX = offsetX + 8.5 * cellSize;
         const ty = 8.5 * cellSize;
         const cY = offsetY + ty;
-        
-        ctx.save();
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
-        ctx.shadowBlur = 40;
-        ctx.shadowColor = 'red';
-        ctx.beginPath();
-        ctx.arc(cX, cY, cellSize * 1.5, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // 보스 코어
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(cX, cY, cellSize * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+
+        // 보스 이미지(없으면 기존 원 형태 폴백)
+        const bossImgReady = !!(BOSS_IMG && BOSS_IMG.complete && BOSS_IMG.naturalWidth > 0);
+        if (bossImgReady) {
+            const size = cellSize * 3.3;
+            const pulse = 0.98 + 0.04 * Math.sin(state.nowMs * 0.006);
+            ctx.save();
+            ctx.translate(cX, cY);
+            ctx.rotate(state.nowMs * 0.0007);
+            ctx.shadowBlur = 28;
+            ctx.shadowColor = 'rgba(255, 40, 40, 0.75)';
+            ctx.globalAlpha = 0.98;
+            ctx.drawImage(BOSS_IMG, -size * pulse / 2, -size * pulse / 2, size * pulse, size * pulse);
+            ctx.restore();
+        } else {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+            ctx.shadowBlur = 40;
+            ctx.shadowColor = 'red';
+            ctx.beginPath();
+            ctx.arc(cX, cY, cellSize * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 보스 코어
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(cX, cY, cellSize * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
 
         // 레이저 렌더 (경고 점멸 → 발사)
         for (const laser of state.boss.lasers) {
@@ -4491,26 +4634,53 @@ function drawMaze() {
             ctx.rotate(laser.angle);
             
             if (isWarning) {
-                // 경고(투명도 높은 점멸 레이저)
-                const blink = 0.25 + 0.55 * Math.abs(Math.sin(state.nowMs * 0.018));
-                ctx.strokeStyle = `rgba(255, 60, 60, ${0.10 + 0.25 * blink})`;
-                ctx.setLineDash([8, 10]);
-                ctx.lineWidth = 2;
+                // 경고(가이드선): 더 굵게/더 밝게/양방향으로(가시성 강화)
+                const blink = 0.35 + 0.65 * Math.abs(Math.sin(state.nowMs * 0.018));
+                const len = cellSize * 20;
+                ctx.lineCap = 'round';
+                ctx.setLineDash([cellSize * 0.45, cellSize * 0.55]);
+                ctx.shadowBlur = 22;
+                ctx.shadowColor = 'rgba(255, 40, 40, 0.95)';
+
+                // 바깥 레드 글로우
+                ctx.strokeStyle = `rgba(255, 60, 60, ${0.35 + 0.45 * blink})`;
+                ctx.lineWidth = Math.max(2, cellSize * (laser.width || 1.6) * 0.45);
                 ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(cellSize * 20, 0);
+                ctx.moveTo(-len, 0);
+                ctx.lineTo(len, 0);
+                ctx.stroke();
+
+                // 안쪽 하이라이트(거의 흰색)
+                ctx.shadowBlur = 0;
+                ctx.setLineDash([cellSize * 0.35, cellSize * 0.55]);
+                ctx.strokeStyle = `rgba(255, 245, 245, ${0.25 + 0.35 * blink})`;
+                ctx.lineWidth = Math.max(1, cellSize * 0.12);
+                ctx.beginPath();
+                ctx.moveTo(-len, 0);
+                ctx.lineTo(len, 0);
                 ctx.stroke();
             } else {
                 // 실제 레이저
                 const activeT = (t - warnMs);
                 const lifePct = 1 - (activeT / Math.max(1, laser.lifeMs));
-                ctx.strokeStyle = `rgba(255, 50, 50, ${Math.max(0.15, lifePct)})`;
-                ctx.lineWidth = laser.width * cellSize * Math.max(0.35, lifePct);
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = 'red';
+                const len = cellSize * 20;
+                ctx.lineCap = 'round';
+                ctx.strokeStyle = `rgba(255, 50, 50, ${Math.max(0.22, lifePct)})`;
+                ctx.lineWidth = (laser.width || 1.6) * cellSize * Math.max(0.55, lifePct);
+                ctx.shadowBlur = 32;
+                ctx.shadowColor = 'rgba(255, 30, 30, 0.95)';
                 ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(cellSize * 20, 0);
+                ctx.moveTo(-len, 0);
+                ctx.lineTo(len, 0);
+                ctx.stroke();
+
+                // 코어 라인(밝게)
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = `rgba(255, 245, 245, ${Math.max(0.10, lifePct * 0.55)})`;
+                ctx.lineWidth = Math.max(1, cellSize * 0.16);
+                ctx.beginPath();
+                ctx.moveTo(-len, 0);
+                ctx.lineTo(len, 0);
                 ctx.stroke();
             }
             ctx.restore();
