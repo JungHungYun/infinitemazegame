@@ -63,8 +63,10 @@ function withTimeout(promise, ms, label = '요청') {
     const timeout = new Promise((_, reject) => {
         t = setTimeout(() => reject(new Error(`${label} 타임아웃(${ms}ms). 네트워크/차단(광고차단/기업망)/Supabase 장애를 확인하세요.`)), ms);
     });
+    // supabase 쿼리 객체는 thenable이지만 Promise가 아니라 finally()가 없을 수 있음
+    const p = Promise.resolve(promise);
     return Promise.race([
-        promise.finally(() => { if (t) clearTimeout(t); }),
+        p.finally(() => { if (t) clearTimeout(t); }),
         timeout,
     ]);
 }
@@ -121,7 +123,7 @@ async function leaderboardRefresh() {
     try {
         const root = document.getElementById('leaderboard');
         if (root) {
-            root.innerHTML = '<div class="lb-row muted">리더보드 로딩중... (v20251227_2)</div>';
+            root.innerHTML = '<div class="lb-row muted">리더보드 로딩중... (v20251227_3)</div>';
         }
     } catch (_) {}
 
