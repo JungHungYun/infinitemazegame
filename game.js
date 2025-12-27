@@ -1314,6 +1314,7 @@ function init() {
     window.addEventListener('pointermove', handlePointerMove, { passive: false });
     canvas.addEventListener('pointerdown', handlePointerDown, { passive: false });
     window.addEventListener('pointerup', handlePointerUp, { passive: false });
+    initHudUI();
     initAbilityModalUI();
     initSettingsModalUI();
     initTitleScreenUI();
@@ -1333,6 +1334,33 @@ function init() {
     state.cameraY = state.player.worldPos.y * CONFIG.CHUNK_SIZE - state.view.h * 0.7;
     
     requestAnimationFrame(gameLoop);
+}
+
+function initHudUI() {
+    const hud = document.getElementById('hud');
+    const settingsBtn = document.getElementById('hud-settings');
+    const missileBtn = document.getElementById('hud-missile');
+    if (hud) {
+        hud.classList.add('hidden');
+        hud.setAttribute('aria-hidden', 'true');
+    }
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            unlockAudioOnce();
+            toggleSettingsModal();
+            updateUI();
+        });
+    }
+    if (missileBtn) {
+        missileBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            unlockAudioOnce();
+            tryFireMissileFromInventory();
+        });
+    }
 }
 
 function initTitleScreenUI() {
@@ -1532,11 +1560,6 @@ function handleClick(e) {
     if (!state.ui.started) return;
     if (state.ui.gameOverOpen) return;
     if (state.ui.settingsOpen || state.ui.modalOpen) return;
-    if (state.mode === 'MAZE') {
-        // X키 대신: 화면 탭/좌클릭 = 미사일 발사
-        tryFireMissileFromInventory();
-        return;
-    }
     if (state.mode === 'WORLD') {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
@@ -1576,6 +1599,35 @@ function updateUI() {
             `상태: 미로 (${state.currentChunk.x}, ${state.currentChunk.y})` +
             `<br/>추격자: ${chaserOn}${inbound}${stunned} · 속도: ${speed} · 잡힘: ${state.chaser.caughtCount}` +
             `<br/>인벤토리: 미사일 <span style="color:#ffd24d;">${state.inventory.missiles}</span> (X로 발사)`;
+    }
+
+    // HUD 버튼 표시/상태
+    const hud = document.getElementById('hud');
+    const missileBtn = document.getElementById('hud-missile');
+    const settingsBtn = document.getElementById('hud-settings');
+    const hudVisible = !!state.ui.started && !state.ui.gameOverOpen;
+    if (hud) {
+        hud.classList.toggle('hidden', !hudVisible);
+        hud.setAttribute('aria-hidden', hudVisible ? 'false' : 'true');
+    }
+
+    // 설정 버튼은 시작 후 항상 표시(모달이 열려있어도 무방)
+    if (settingsBtn) {
+        settingsBtn.classList.toggle('hidden', !hudVisible);
+    }
+
+    // 미사일 버튼은 미로에서만 표시
+    if (missileBtn) {
+        const show = hudVisible && state.mode === 'MAZE';
+        missileBtn.classList.toggle('hidden', !show);
+        missileBtn.textContent = `미사일 발사 (${state.inventory.missiles})`;
+        const canFire =
+            show &&
+            state.inventory.missiles > 0 &&
+            state.chaser.active &&
+            !state.ui.settingsOpen &&
+            !state.ui.modalOpen;
+        missileBtn.disabled = !canFire;
     }
 }
 

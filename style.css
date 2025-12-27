@@ -219,12 +219,12 @@ canvas {
 }
 
 .settings-card {
-    width: min(560px, calc(100vw - 40px));
+    width: min(680px, calc(100vw - 24px));
     background: rgba(12, 12, 12, 0.95);
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 14px;
     box-shadow: 0 18px 55px rgba(0,0,0,0.75);
-    padding: 18px;
+    padding: 22px;
 }
 
 #settings-modal {
@@ -322,39 +322,119 @@ canvas {
 }
 
 .settings-title {
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 800;
     color: #fff;
 }
 
 .settings-row {
     display: grid;
-    grid-template-columns: 70px 1fr 56px;
+    grid-template-columns: 84px 1fr 64px;
     align-items: center;
     gap: 10px;
-    padding: 10px 0;
+    padding: 12px 0;
 }
 
 .settings-label {
     color: #ddd;
     font-weight: 700;
-    font-size: 13px;
+    font-size: 15px;
 }
 
 .settings-val {
     text-align: right;
     color: #9ad1ff;
     font-weight: 800;
+    font-size: 15px;
 }
 
 .settings-slider {
     width: 100%;
+    height: 28px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+}
+
+.settings-slider::-webkit-slider-runnable-track {
+    height: 10px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+}
+.settings-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 26px;
+    height: 26px;
+    margin-top: -9px; /* (thumb - track)/2 */
+    border-radius: 999px;
+    background: rgba(0,255,255,0.55);
+    border: 2px solid rgba(0,255,255,0.85);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+}
+
+.settings-slider::-moz-range-track {
+    height: 10px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+}
+.settings-slider::-moz-range-thumb {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background: rgba(0,255,255,0.55);
+    border: 2px solid rgba(0,255,255,0.85);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
 }
 
 .settings-sub {
     margin-top: 10px;
     color: #9a9a9a;
-    font-size: 12px;
+    font-size: 13px;
+}
+
+/* 인게임 HUD */
+.hud {
+    position: fixed;
+    inset: 0;
+    z-index: 15; /* canvas 위, 모달 아래 */
+    pointer-events: none;
+}
+.hud-btn {
+    pointer-events: auto;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(0,0,0,0.42);
+    color: #fff;
+    font-weight: 900;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+.hud-settings {
+    position: absolute;
+    top: calc(14px + env(safe-area-inset-top));
+    right: calc(14px + env(safe-area-inset-right));
+    width: 48px;
+    height: 48px;
+    font-size: 22px;
+    line-height: 1;
+}
+.hud-missile {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    min-width: 220px;
+    height: 56px;
+    padding: 0 16px;
+    font-size: 16px;
+    background: rgba(255, 210, 77, 0.14);
+    border-color: rgba(255, 210, 77, 0.35);
+}
+.hud-missile:disabled {
+    opacity: 0.55;
 }
 
 .ability-card {

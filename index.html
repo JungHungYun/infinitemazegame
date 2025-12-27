@@ -15,6 +15,12 @@
         <canvas id="gameCanvas"></canvas>
     </div>
 
+    <!-- 인게임 HUD (모바일/터치 접근성) -->
+    <div id="hud" class="hud hidden" aria-hidden="true">
+        <button id="hud-settings" class="hud-btn hud-settings" type="button" aria-label="설정">⚙</button>
+        <button id="hud-missile" class="hud-btn hud-missile" type="button">미사일 발사</button>
+    </div>
+
     <!-- 타이틀 화면: 시작 버튼 클릭 시 시작 -->
     <div id="title-screen" role="dialog" aria-modal="true">
         <div class="title-card">
@@ -27,7 +33,7 @@
                         <div class="title-controls-title">조작법</div>
                         <div class="title-controls-grid">
                             <div class="k">마우스</div><div class="v">이동 방향</div>
-                            <div class="k">X</div><div class="v">미사일 발사 (또는 화면 탭/좌클릭)</div>
+                            <div class="k">X</div><div class="v">미사일 발사 (X / 하단 버튼)</div>
                             <div class="k">ESC</div><div class="v">설정</div>
                         </div>
                     </div>
