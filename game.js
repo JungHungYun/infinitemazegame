@@ -19,6 +19,14 @@ const state = {
         invincibleUntilMs: 0, // 플레이어 무적 시간
         shieldCharges: 0, // 실드 잔량(피격 1회 무효)
     },
+    input: {
+        pointerDown: false,
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        startMs: 0,
+        moved: false,
+    },
     boss: {
         active: false,
         hp: 0,
@@ -1302,7 +1310,10 @@ function init() {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('click', handleClick);
+    // 모바일/터치 지원: pointer 이벤트로 통일 (탭 = X(미사일)과 동일한 동작)
+    window.addEventListener('pointermove', handlePointerMove, { passive: false });
+    canvas.addEventListener('pointerdown', handlePointerDown, { passive: false });
+    window.addEventListener('pointerup', handlePointerUp, { passive: false });
     initAbilityModalUI();
     initSettingsModalUI();
     initTitleScreenUI();
@@ -1459,12 +1470,73 @@ function handleMouseMove(e) {
     state.mouse.y = e.clientY;
 }
 
+function handlePointerDown(e) {
+    // 오디오 언락(브라우저 자동재생 정책 대응)
+    unlockAudioOnce();
+    // 터치 스크롤/줌 제스처로 캔버스 입력이 씹히는 것 방지
+    try { e.preventDefault(); } catch (_) {}
+
+    state.mouse.x = e.clientX;
+    state.mouse.y = e.clientY;
+
+    state.input.pointerDown = true;
+    state.input.pointerId = e.pointerId;
+    state.input.startX = e.clientX;
+    state.input.startY = e.clientY;
+    state.input.startMs = performance.now();
+    state.input.moved = false;
+}
+
+function handlePointerMove(e) {
+    // 터치에서도 마우스 좌표 업데이트(모바일 조작 핵심)
+    if (e.cancelable) {
+        // 화면 스크롤 방지(게임 조작 우선)
+        try { e.preventDefault(); } catch (_) {}
+    }
+    state.mouse.x = e.clientX;
+    state.mouse.y = e.clientY;
+
+    // 드래그(조작) 중이면 탭(발사)로 인식하지 않도록 이동량 체크
+    if (!state.input.pointerDown) return;
+    if (state.input.pointerId != null && e.pointerId !== state.input.pointerId) return;
+    const dx = e.clientX - state.input.startX;
+    const dy = e.clientY - state.input.startY;
+    if ((dx * dx + dy * dy) > (12 * 12)) state.input.moved = true;
+}
+
+function handlePointerUp(e) {
+    if (!state.input.pointerDown) return;
+    if (state.input.pointerId != null && e.pointerId !== state.input.pointerId) return;
+
+    state.mouse.x = e.clientX;
+    state.mouse.y = e.clientY;
+
+    const dt = performance.now() - (state.input.startMs || 0);
+    const dx = e.clientX - state.input.startX;
+    const dy = e.clientY - state.input.startY;
+    const dist2 = dx * dx + dy * dy;
+
+    state.input.pointerDown = false;
+    state.input.pointerId = null;
+
+    // 짧은 탭만 "클릭"으로 인정(드래그 조작 중 미사일 오발 방지)
+    const isTap = !state.input.moved && dist2 <= (12 * 12) && dt <= 250;
+    if (!isTap) return;
+
+    handleClick(e);
+}
+
 function handleClick(e) {
     // 오디오 언락(브라우저 자동재생 정책 대응)
     unlockAudioOnce();
     if (!state.ui.started) return;
     if (state.ui.gameOverOpen) return;
     if (state.ui.settingsOpen || state.ui.modalOpen) return;
+    if (state.mode === 'MAZE') {
+        // X키 대신: 화면 탭/좌클릭 = 미사일 발사
+        tryFireMissileFromInventory();
+        return;
+    }
     if (state.mode === 'WORLD') {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
