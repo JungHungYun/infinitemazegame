@@ -30,6 +30,13 @@ create table if not exists public.leaderboard_scores (
   created_at timestamptz not null default now()
 );
 
+-- ===== 0.1) 재실행(업그레이드) 안전장치: 기존 테이블에도 컬럼 추가 =====
+alter table public.leaderboard_best
+  add column if not exists platform text not null default 'pc';
+
+alter table public.leaderboard_scores
+  add column if not exists platform text not null default 'pc';
+
 -- ===== 1) 닉네임 유니크(대소문자 무시) =====
 alter table public.profiles
   alter column username drop not null;
@@ -78,6 +85,10 @@ left join public.profiles p
 -- PostgREST(=supabase-js)에서 view를 읽을 수 있도록 권한 부여
 grant select on public.leaderboard_view to anon, authenticated;
 
+-- 클라이언트 폴백(뷰 실패 시 best 직접 조회) 대비: best/profiles select 권한도 명시
+grant select on public.profiles to anon, authenticated;
+grant select on public.leaderboard_best to anon, authenticated;
+
 -- ===== 3) 점수 제출 RPC (조건부 업서트) =====
 -- v2: 플랫폼(pc/mobile)도 함께 저장
 create or replace function public.submit_score_v2(p_score int, p_floor int, p_platform text)
@@ -115,6 +126,18 @@ begin
   where
     excluded.score > public.leaderboard_best.score
     or (excluded.score = public.leaderboard_best.score and excluded.floor > public.leaderboard_best.floor);
+end;
+$$;
+
+-- 구버전 호환: submit_score(p_score, p_floor) → v2로 위임(기본 platform='pc')
+create or replace function public.submit_score(p_score int, p_floor int)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.submit_score_v2(p_score, p_floor, 'pc');
 end;
 $$;
 
@@ -160,6 +183,9 @@ with check (auth.uid() = user_id);
 -- ===== 6) RPC 권한 =====
 revoke all on function public.submit_score_v2(int, int, text) from public;
 grant execute on function public.submit_score_v2(int, int, text) to authenticated;
+
+revoke all on function public.submit_score(int, int) from public;
+grant execute on function public.submit_score(int, int) to authenticated;
 
 -- ===== 7) PostgREST 스키마 캐시 갱신 =====
 -- SQL 실행 직후에도 supabase-js에서 "schema cache" 오류가 나면 아래를 추가로 실행하세요.
