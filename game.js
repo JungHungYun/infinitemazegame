@@ -146,8 +146,6 @@ const state = {
         slowUntilMs: 0, // 강화 화약 슬로우 효과
         deadUntilNextChunk: false, // 살상 미사일에 의해 파괴됨
         respawnTimerMs: 0,
-        // 보스전 종료 직후 스폰/미사일 난사 방지용 쿨다운
-        bossCooldownUntilMs: 0,
     },
     chaserProjectiles: [], // {pos, vel}
 
@@ -206,12 +204,6 @@ const state = {
         killMissileUnlocked: false, // 살상 미사일
         maxLives: 3,
         shieldMax: 0, // 실드 최대치(구매로 증가, 최대 3)
-        // 금융 어빌리티
-        bankDeposit: { enabled: false, intervalMs: 10000, timerMs: 0 }, // 예금: 10s마다 +1coin, 점점 빨라짐(최소 1s)
-        bankSaving: { enabled: false, targetFloors: 5, progress: 0 },   // 적금: N층마다 +10coin, 점점 N 감소(최소 1)
-        livingLoan: { debt: 0, graceFloors: 0, repayAccMs: 0, penaltyAccMs: 0, penaltyRate: 0 }, // 생활비 대출
-        freeRerollTickets: 0, // 무료 티켓 잔여(상점 리롤 무료 횟수)
-        freeRerollRestoreCost: 1, // 티켓 소진 후 복구할 리롤 비용
         boughtCountByRarity: {
             COMMON: 0,
             RARE: 0,
@@ -240,6 +232,9 @@ const state = {
         abilityChoices: [],
         boughtAbilities: new Set(),    // 이번 리롤에서 이미 구매한 능력들
         abilityRerollCost: 1,         // 현재 리롤 비용
+        // 무료 티켓(무료 리롤): 남은 횟수 / 소진 후 복구할 리롤 비용
+        freeRerollsLeft: 0,
+        freeRerollRestoreCost: 1,
         pendingEnter: null, // {x,y,entryDir}
         // 아이템 획득 직후 1초간 캐릭터 위에 보유량 표시(아이콘 + 세그먼트 숫자)
         pickupBadgeUntilMs: 0,
@@ -1155,14 +1150,6 @@ function addCoins(base) {
     return gained;
 }
 
-// 음수 포함 코인 증감(대출/상환 등). coinGainBonus는 적용하지 않음.
-function addCoinsSigned(delta) {
-    const d = Number(delta || 0);
-    if (!Number.isFinite(d) || d === 0) return 0;
-    state.coins = (state.coins ?? 0) + d;
-    return d;
-}
-
 function isPlayerInvincible() {
     return state.nowMs < (state.player.invincibleUntilMs || 0);
 }
@@ -1654,12 +1641,6 @@ function restartRun() {
         killMissileUnlocked: false,
         maxLives: 3,
         shieldMax: 0,
-        // 금융 어빌리티
-        bankDeposit: { enabled: false, intervalMs: 10000, timerMs: 0 },
-        bankSaving: { enabled: false, targetFloors: 5, progress: 0 },
-        livingLoan: { debt: 0, graceFloors: 0, repayAccMs: 0, penaltyAccMs: 0, penaltyRate: 0 },
-        freeRerollTickets: 0,
-        freeRerollRestoreCost: 1,
         boughtCountByRarity: { COMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
         rarityBonus: { COMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
     };
@@ -1708,7 +1689,6 @@ function restartRun() {
         slowUntilMs: 0,
         deadUntilNextChunk: false,
         respawnTimerMs: 0,
-        bossCooldownUntilMs: 0,
     };
 
     // 청크/카메라/입구 초기화
@@ -2028,10 +2008,13 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
     // 최고 층 기록
     state.ui.maxFloorReached = Math.max(1, Math.floor(state.ui.maxFloorReached ?? 1), y + 1);
 
-    // 층수 증가(북쪽으로 이동) 시 금융/대출 카운트 반영
-    if (prevChunk && Number.isFinite(prevChunk.y) && y > prevChunk.y) {
-        onFloorPassed();
-    }
+    // 금융/층 기반 어빌리티 처리: 층 상승(=y 증가) 이벤트
+    try {
+        const prevFloor = (prevChunk?.y ?? y) + 1;
+        const newFloor = y + 1;
+        const gained = Math.max(0, Math.floor(newFloor - prevFloor));
+        if (gained > 0) onFloorsAdvanced(gained);
+    } catch (_) {}
 
     // 청크(맵) 전환 시 남아있는 투사체/예약발사 정리
     // - 적 투사체(state.chaserProjectiles)가 다음 맵까지 남아있는 버그 방지
@@ -2081,6 +2064,33 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
     spawnItemForChunkIfNeeded();
     refillShieldOnChunkChange(prevChunk, state.currentChunk);
     updateUI();
+}
+
+function onFloorsAdvanced(floorsGained) {
+    const n = Math.max(0, Math.floor(floorsGained || 0));
+    if (n <= 0) return;
+    let changed = false;
+
+    // 적금: N층마다 이자 10코인, 지급할 때마다 필요 층수 -1(최소 1)
+    const saving = state.abilities.bankSaving;
+    if (saving?.enabled) {
+        saving.progress = Math.max(0, Math.floor(saving.progress || 0)) + n;
+        saving.targetFloors = Math.max(1, Math.floor(saving.targetFloors || 5));
+        while (saving.progress >= saving.targetFloors) {
+            saving.progress -= saving.targetFloors;
+            addCoins(10);
+            saving.targetFloors = Math.max(1, saving.targetFloors - 1);
+            changed = true;
+        }
+    }
+
+    // 생활비 대출: 유예 층수 차감
+    const loan = state.abilities.livingLoan;
+    if (loan?.debt > 0) {
+        loan.graceFloors = Math.max(0, Math.floor(loan.graceFloors || 0) - n);
+    }
+
+    if (changed) updateUI();
 }
 
 function randomOpenCellInMaze(maze, seedStr) {
@@ -2423,9 +2433,6 @@ function update(dt) {
     if (!state.ui.started) return;
     // 게임 오버 중에는 게임 로직 정지(렌더는 모달이 담당)
     if (state.ui.gameOverOpen) return;
-
-    // 금융/상환 등 "시간 기반" 로직은 모드/상점/설정과 무관하게 진행(게임오버 제외)
-    updateEconomy(dt);
     // 프레임 시작: 마찰 접촉 플래그 및 마찰열 연출 리셋
     if (state.mode === 'MAZE') {
         state.audio.wallRubContactThisFrame = false;
@@ -2450,6 +2457,8 @@ function update(dt) {
         if (state.ui.modalOpen) return; // 어빌리티 선택 중엔 게임 일시정지
         // 시간 경과에 따른 점수 감점: 1초에 2점(층수 배수 적용)
         subScore(2 * (Math.min(dt, 80) / 1000), getFloor());
+        // 금융 어빌리티(예금/대출 상환 등)
+        updateFinanceAbilities(dt);
         updateMaze(dt);
         updateChaser(dt);
         updateBoss(dt);
@@ -2533,59 +2542,6 @@ function updateWallRegen(dt) {
             chunk.maze[ty][tx] = info.val;
             chunk.brokenWalls.delete(key);
             chunk.mazeTex = null; // 텍스처 갱신
-        }
-    }
-}
-
-function updateEconomy(dt) {
-    const a = state.abilities || {};
-    // 1) 예금: interval마다 +1 coin, 받을 때마다 interval -0.25s (최소 1s)
-    if (a.bankDeposit?.enabled) {
-        a.bankDeposit.timerMs = (a.bankDeposit.timerMs || 0) + dt;
-        let interval = Math.max(1000, Number(a.bankDeposit.intervalMs || 10000));
-        // 과도한 루프 방지
-        let guard = 0;
-        while (a.bankDeposit.timerMs >= interval && guard++ < 20) {
-            a.bankDeposit.timerMs -= interval;
-            addCoinsSigned(1);
-            interval = Math.max(1000, interval - 250);
-        }
-        a.bankDeposit.intervalMs = interval;
-    }
-
-    // 2) 생활비 대출 상환: 5층 통과 후 5초당 1코인 상환, 코인이 음수면 1초당 추가 상환액 +1 증가
-    if (a.livingLoan?.debt > 0) {
-        const loan = a.livingLoan;
-        // graceFloors>0이면 층 통과를 기다림
-        if ((loan.graceFloors || 0) <= 0) {
-            // 기본 상환: 5초당 1
-            loan.repayAccMs = (loan.repayAccMs || 0) + dt;
-            while (loan.repayAccMs >= 5000 && loan.debt > 0) {
-                loan.repayAccMs -= 5000;
-                const pay = Math.min(1, loan.debt);
-                addCoinsSigned(-pay);
-                loan.debt -= pay;
-            }
-
-            // 패널티: 코인이 음수인 동안 1초마다 상환액이 1씩 증가, 그 증가분만큼 추가 상환
-            if ((state.coins ?? 0) < 0 && loan.debt > 0) {
-                loan.penaltyAccMs = (loan.penaltyAccMs || 0) + dt;
-                while (loan.penaltyAccMs >= 1000 && loan.debt > 0) {
-                    loan.penaltyAccMs -= 1000;
-                    loan.penaltyRate = (loan.penaltyRate || 0) + 1;
-                    const pay = Math.min(loan.penaltyRate, loan.debt);
-                    addCoinsSigned(-pay);
-                    loan.debt -= pay;
-                }
-            }
-        }
-
-        if (loan.debt <= 0) {
-            loan.debt = 0;
-            loan.graceFloors = 0;
-            loan.repayAccMs = 0;
-            loan.penaltyAccMs = 0;
-            loan.penaltyRate = 0;
         }
     }
 }
@@ -2715,6 +2671,71 @@ function updateFx(dt) {
     }
 }
 
+function updateFinanceAbilities(dt) {
+    const ms = Math.max(0, Math.min(dt || 0, 200));
+    let changed = false;
+
+    // 예금: intervalMs마다 1코인, 받을 때마다 intervalMs -= 250ms (최소 1초)
+    const dep = state.abilities.bankDeposit;
+    if (dep?.enabled) {
+        dep.intervalMs = Math.max(1000, Math.floor(dep.intervalMs || 10000));
+        dep.timerMs = Math.max(0, Math.floor(dep.timerMs || 0)) + ms;
+        while (dep.timerMs >= dep.intervalMs) {
+            dep.timerMs -= dep.intervalMs;
+            addCoins(1);
+            dep.intervalMs = Math.max(1000, dep.intervalMs - 250);
+            changed = true;
+        }
+    }
+
+    // 생활비 대출: 유예 종료 후 상환(5초당 1코인), 코인이 음수면 1초당 추가 상환액(+1씩 증가)
+    const loan = state.abilities.livingLoan;
+    if (loan?.debt > 0) {
+        loan.debt = Math.max(0, Math.floor(loan.debt || 0));
+        loan.graceFloors = Math.max(0, Math.floor(loan.graceFloors || 0));
+        loan.repayAccMs = Math.max(0, Math.floor(loan.repayAccMs || 0));
+        loan.penaltyAccMs = Math.max(0, Math.floor(loan.penaltyAccMs || 0));
+        loan.penaltyPayAccMs = Math.max(0, Math.floor(loan.penaltyPayAccMs || 0));
+        loan.penaltyRate = Math.max(0, Math.floor(loan.penaltyRate || 0));
+
+        const repay = (amt) => {
+            const a = Math.max(0, Math.min(loan.debt, Math.floor(amt || 0)));
+            if (a <= 0) return;
+            state.coins = (state.coins ?? 0) - a;
+            loan.debt -= a;
+            changed = true;
+        };
+
+        if (loan.graceFloors <= 0) {
+            loan.repayAccMs += ms;
+            while (loan.repayAccMs >= 5000 && loan.debt > 0) {
+                loan.repayAccMs -= 5000;
+                repay(1);
+            }
+
+            if ((state.coins ?? 0) < 0 && loan.debt > 0) {
+                loan.penaltyAccMs += ms;
+                while (loan.penaltyAccMs >= 1000) {
+                    loan.penaltyAccMs -= 1000;
+                    loan.penaltyRate += 1;
+                }
+                loan.penaltyPayAccMs += ms;
+                while (loan.penaltyPayAccMs >= 1000 && loan.debt > 0) {
+                    loan.penaltyPayAccMs -= 1000;
+                    repay(loan.penaltyRate);
+                }
+            } else {
+                // 음수 상태가 아니면 패널티 누적은 리셋(너무 가혹해지는 것 방지)
+                loan.penaltyAccMs = 0;
+                loan.penaltyPayAccMs = 0;
+                loan.penaltyRate = 0;
+            }
+        }
+    }
+
+    if (changed) updateUI();
+}
+
 function updateWorld(dt) {
     // 월드맵에서는 청크(정수 좌표) 기반으로만 이동(미로 출구로 나올 때)하도록 둡니다.
     // 실수 좌표로 움직이면 청크 생성 키가 무한히 쪼개져 성능/정합성이 깨질 수 있어 비활성화합니다.
@@ -2773,8 +2794,6 @@ function updateChaser(dt) {
     if (!state.chaser.active) return;
     // 보스전 중에는 추격자 미사일/로직 자체를 진행하지 않음
     if (state.boss.active) return;
-    // 보스전 직후엔 일정 시간 추격자/미사일 등장 금지
-    if (state.chaser.bossCooldownUntilMs && state.nowMs < state.chaser.bossCooldownUntilMs) return;
     // 추격자는 플레이어와 같은 청크에 있다고 가정(청크 넘어갈 때 함께 진입)
     const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
     const maze = chunk.maze;
@@ -2805,7 +2824,9 @@ function updateChaser(dt) {
     }
 
     // 20렙부터 레이저 발사
-    if (getFloor() >= 20 && state.nowMs - state.chaser.lastShotMs > 5000) {
+    // 스턴/유예 시간에는 투사체도 발사하지 않게(보스 클리어 직후 "즉시 발사" 체감 방지)
+    const canShoot = state.nowMs >= state.chaser.stunUntilMs && state.nowMs >= state.chaser.graceUntilMs;
+    if (getFloor() >= 20 && canShoot && state.nowMs - state.chaser.lastShotMs > 5000) {
         state.chaser.lastShotMs = state.nowMs;
         const dx = state.player.mazePos.x - state.chaser.pos.x;
         const dy = state.player.mazePos.y - state.chaser.pos.y;
@@ -3219,15 +3240,17 @@ function onMissileHitTarget(m) {
             if (chunk) chunk.cleared = true;
             addScore(1000, getFloor());
 
-            // 보스방 종료 직후 추격자/추격자 미사일이 튀어나오는 현상 방지:
-            // - 기존 발사체 제거
-            // - 최소 5초 쿨다운 부여(다음 층 진입/상점 표시 구간 포함)
-            state.chaserProjectiles = [];
-            state.chaser.isPresentInMaze = false;
+            // 보스 클리어 직후: 추격자/투사체가 바로 튀어나오는 현상 방지
+            // - 다음 청크에서 추격자 "진입" 딜레이를 강제로 늘림
+            // - 투사체 쿨다운을 현재 시각으로 리셋
+            // - 짧은 유예를 줘서 전환 직후 깔끔한 호흡 확보
+            try { state.chaserProjectiles = []; } catch (_) {}
             state.chaser.lastShotMs = state.nowMs;
-            state.chaser.bossCooldownUntilMs = state.nowMs + 5000;
-            // entryScheduledUntilMs가 과거로 남아있으면 즉시 등장하므로, 쿨다운 이후로 밀어둠
-            state.chaser.entryScheduledUntilMs = state.chaser.bossCooldownUntilMs;
+            state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs || 0, state.nowMs + CONFIG.POST_BOSS_GRACE_MS);
+            state.chaser.nextEntryDelayMs = Math.min(
+                CONFIG.CHASER_ENTRY_DELAY_MAX_MS,
+                Math.max(state.chaser.nextEntryDelayMs || 0, CONFIG.POST_BOSS_GRACE_MS)
+            );
 
             // 보스 클리어 후 다음 층(North)으로 자동 이동 예약
             const nextX = state.currentChunk.x;
@@ -3544,11 +3567,27 @@ function exitMaze(dx, dy) {
     const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
     chunk.cleared = true;
 
-    // 추격자 리스폰 시간:
-    // - 현재 청크에서 "추격자 위치 → 내가 나간 출구 위치" 최단거리(BFS)로 1~5초 결정
-    // - 아직 추격자가 리스폰/등장도 안 했던 상태(INBOUND)에서 청크를 탈출하면 무조건 5초
+    // 청크 클리어(출구 통과) 시점의 상황으로 다음 청크에서의 추격자 "등장(리스폰)" 딜레이를 조정
+    // 1) 이미 추격자가 나와있으면: 멀리 있을수록 더 늦게 따라 들어옴
+    // 2) 아직 추격자가 이 청크에 스폰/등장도 안 했으면(INBOUND): 남아있던 대기 시간을 다음 청크 딜레이에 누적(더 늦어짐)
     if (state.chaser.active) {
-        state.chaser.nextEntryDelayMs = computeChaserRespawnDelayMsFromExit(chunk, dx, dy);
+        if (state.chaser.isPresentInMaze) {
+            const ddx = state.chaser.pos.x - state.player.mazePos.x;
+            const ddy = state.chaser.pos.y - state.player.mazePos.y;
+            const distCells = Math.sqrt(ddx * ddx + ddy * ddy);
+            const extra = distCells * CONFIG.CHASER_ENTRY_DELAY_PER_CELL_MS;
+            state.chaser.nextEntryDelayMs = Math.min(
+                CONFIG.CHASER_ENTRY_DELAY_MAX_MS,
+                CONFIG.CHASER_ENTRY_DELAY_MS + extra
+            );
+        } else {
+            // 아직 등장 전이면, 남아있던 "등장 대기 시간"을 다음 청크 딜레이에 그대로 더해줌
+            const remaining = Math.max(0, (state.chaser.entryScheduledUntilMs || 0) - state.nowMs);
+            state.chaser.nextEntryDelayMs = Math.min(
+                CONFIG.CHASER_ENTRY_DELAY_MAX_MS,
+                CONFIG.CHASER_ENTRY_DELAY_MS + remaining
+            );
+        }
     }
 
     // 안전장치: 좌/우 끝 청크는 바깥으로 이동 금지
@@ -3566,7 +3605,6 @@ function exitMaze(dx, dy) {
     if (nextY > prevWorldY) {
         const newFloor = nextY + 1;
         addScore(100, newFloor);
-        onFloorPassed();
     }
 
     // 이동 방향의 "반대편" 입구로 다음 청크에 들어가야 함
@@ -3600,52 +3638,6 @@ function exitMaze(dx, dy) {
 
     // 즉시 진입 대신 스와이프 전환 시작 → 전환 종료 시 enterMaze 호출
     startChunkSwipeTransition({ dx, dy, nextX, nextY, entryDir });
-}
-
-function computeChaserRespawnDelayMsFromExit(chunk, dx, dy) {
-    const MIN_MS = 1000;
-    const MAX_MS = 5000;
-    // 추격자가 아직 등장하지 않은 상태라면 최대치(5초)
-    if (!state.chaser.isPresentInMaze) return MAX_MS;
-    if (!chunk?.maze) return MAX_MS;
-
-    // 출구 위치(플레이어가 나간 방향 기준)를 타일로 변환
-    const exitPos = getExitEdgePos(dx, dy);
-    const gx = Math.floor(exitPos.x);
-    const gy = Math.floor(exitPos.y);
-
-    // 추격자 현재 타일
-    const sx = Math.floor(state.chaser.pos.x);
-    const sy = Math.floor(state.chaser.pos.y);
-
-    const start = findNearestOpenCell(chunk.maze, sx, sy) || { x: sx, y: sy };
-    const goal = findNearestOpenCell(chunk.maze, gx, gy) || { x: gx, y: gy };
-    const path = bfsPath(chunk.maze, start, goal);
-    const dist = (path && path.length) ? Math.max(0, path.length - 1) : null;
-    if (dist == null) return MAX_MS;
-
-    // 거리→시간 매핑: 가까울수록 빠르게(최소 1초), 멀수록 느리게(최대 5초)
-    // 20칸 이상이면 5초로 클램프
-    const t = Math.max(0, Math.min(1, dist / 20));
-    return Math.round(MIN_MS + (MAX_MS - MIN_MS) * t);
-}
-
-function onFloorPassed() {
-    const a = state.abilities || {};
-    // 적금: N층 통과마다 +10, 받을 때마다 N-1 (최소 1)
-    if (a.bankSaving?.enabled) {
-        a.bankSaving.progress = (a.bankSaving.progress || 0) + 1;
-        const need = Math.max(1, Math.floor(a.bankSaving.targetFloors || 5));
-        if (a.bankSaving.progress >= need) {
-            a.bankSaving.progress = 0;
-            a.bankSaving.targetFloors = Math.max(1, need - 1);
-            addCoinsSigned(10);
-        }
-    }
-    // 생활비 대출: graceFloors 감소
-    if (a.livingLoan?.debt > 0 && (a.livingLoan.graceFloors || 0) > 0) {
-        a.livingLoan.graceFloors = Math.max(0, (a.livingLoan.graceFloors || 0) - 1);
-    }
 }
 
 // --- 렌더링 ---
