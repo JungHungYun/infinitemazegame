@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Infinite Maze Game</title>
+    <!-- 캐시로 인한 버전 불일치(로그인/리더보드 오류) 완화: 브라우저 캐시를 최대한 억제 -->
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -133,6 +137,9 @@
             <div class="gameover-hint">Enter / R 로도 다시 시작할 수 있어요.</div>
         </div>
     </div>
+
+    <!-- Service Worker: 캐시 꼬임 근본 완화(네트워크 우선 + 업데이트 감지) -->
+    <script src="sw-register.js?v=20251227_1"></script>
 
     <!-- 캐시 강제 갱신을 위한 버전 파라미터 -->
     <script src="config.js?v=20251227_5"></script>
