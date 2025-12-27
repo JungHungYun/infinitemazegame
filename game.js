@@ -5,88 +5,6 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// 게임 설정
-const CONFIG = {
-    CHUNK_COLS: 5,
-    CHUNK_SIZE: 180, // 월드 맵에서 청크의 크기
-    MAZE_SIZE: 17,   // 청크 내부 미로의 칸 수 (홀수가 좋음)
-    PLAYER_RADIUS: 0.3, // 셀 크기 대비 플레이어 반지름
-    MOVE_SPEED: 0.2, // 셀 단위 속도 (상향)
-    FPS: 60,
-    START_CHUNK_X: 2,
-    START_CHUNK_Y: 0,
-    CHASER_START_ROW_Y: 2, // 3번째 행(y=2)부터 추격자 활성/스폰
-    // 추격자(몹) 설정
-    CHASER_SPEED: 2.0, // 셀/초 (기본)
-    CHASER_RADIUS: 0.33, // 셀 단위 반지름
-    CHASER_REPATH_MS: 250,
-    CHASER_GRACE_MS: 650, // 리셋 직후 유예 시간
-    CHASER_ENTRY_DELAY_MS: 1000, // 청크 진입 후 추격자가 "등장"하기까지 딜레이
-    CHASER_ENTRY_DELAY_PER_CELL_MS: 180, // 청크 클리어 시 거리(셀) 1당 추가 딜레이
-    CHASER_ENTRY_DELAY_MAX_MS: 4200, // 최대 등장 딜레이
-    CHASER_SPEEDUP_PER_CHUNK: 0.12, // 청크 넘어갈 때마다 가속(배수에 더해짐)
-    CHASER_MAX_SPEED_MULT: 3.0,
-
-    // 아이템/미사일
-    ITEM_SPAWN_CHANCE: 0.55, // 청크당 아이템 등장 확률(임시)
-    MISSILE_SPEED: 9.0, // 셀/초
-    MISSILE_TURN_RATE: 16.0, // 1초당 방향 보정 강도(클수록 더 즉각적으로 유도)
-    STUN_MS: 1200,
-    SLOW_MULT_ON_HIT: 0.75, // 맞을 때 속도 배수 감소(곱)
-
-    // 이펙트(연출)
-    FX_PARTICLE_MAX: 100,
-    FX_SHAKE_DECAY: 14.0, // 1초당 감소
-    FX_FLASH_DECAY: 3.6,  // 1초당 감소
-    FX_SCALE: 0.33, // 전체 이펙트 크기(반지름/꼬리/글로우/쉐이크) 스케일
-
-    // 벽 파괴(문대기)
-    WALL_RUB_BREAK_MS: 5000,
-    WALL_RUB_DECAY_PER_SEC: 0.9, // 초당 감소량(문대지 않으면 서서히 식음)
-    WALL_UNBREAKABLE_MARGIN: 1, // 청크 외곽 벽(테두리) 파괴 금지 두께(1이면 가장자리 1칸)
-
-    // 벽 레벨별 설정 (내구도 배수 및 색상)
-    WALL_LEVELS: [
-        { name: '갈색', color: [72, 50, 34], durability: 1, startProb: 1.0 },
-        { name: '파랑', color: [34, 50, 120], durability: 2, startProb: 0.20 },
-        { name: '녹색', color: [34, 120, 50], durability: 4, startProb: 0.15 },
-        { name: '보라색', color: [100, 34, 120], durability: 8, startProb: 0.12 },
-        { name: '노랑색', color: [130, 120, 30], durability: 16, startProb: 0.10 },
-        { name: '주황색', color: [140, 80, 30], durability: 32, startProb: 0.08 },
-        { name: '빨강색', color: [140, 30, 30], durability: 64, startProb: 0.07 },
-        { name: '회색', color: [80, 80, 80], durability: 128, startProb: 0.06 },
-        { name: '흰색', color: [210, 210, 210], durability: 256, startProb: 0.05 },
-        { name: '검정색', color: [25, 25, 25], durability: 512, startProb: 0.05 }
-    ],
-
-    // 능력치 상한값
-    MAX_WALL_BREAK_SPEED_MULT: 100.0,
-    MAX_MISSILE_SPAWN_CHANCE_MULT: 5.0,
-    MAX_MISSILE_STUN_BONUS_MS: 5000,
-    MAX_MOVE_SPEED_MULT: 3.0,
-    MAX_MISSILE_COUNT: 5,
-    MAX_SHOP_SLOTS: 6,
-
-    // 보스전 설정
-    BOSS_HEALTH: 50,
-    MISSILE_DAMAGE: 5,
-    GUNPOWDER_DAMAGE_MULT: 3,
-    GUNPOWDER_SLOW_MULT: 0.8,
-    GUNPOWDER_SLOW_DUR_MS: 10000,
-    WALL_REGEN_MS: 10000,
-    MISSILE_RESPAWN_MS: 5000,
-
-    // 어빌리티 희귀도 확률
-    RARITY_PROBS: {
-        COMMON: 0.71,
-        RARE: 0.20,
-        EPIC: 0.08,
-        LEGENDARY: 0.01
-    },
-
-    DEBUG: false, // 디버그 모드 (true 설정 시 벽부수기 해제, 코인/미사일 1000개 시작)
-};
-
 // 게임 상태
 const state = {
     mode: 'WORLD', // 'WORLD' 또는 'MAZE'
@@ -222,6 +140,10 @@ const state = {
         started: false, // 타이틀 화면에서 첫 입력 후 true
         modalOpen: false,
         settingsOpen: false,
+        gameOverOpen: false,
+        runStartMs: null,
+        maxFloorReached: 1,
+        bossKills: 0,
         abilityShownFloors: new Set(), // 이미 선택창을 띄운 층(중복 방지)
         abilityChoices: [],
         boughtAbilities: new Set(),    // 이번 리롤에서 이미 구매한 능력들
@@ -487,359 +409,7 @@ function drawGunpowderIcon(ctx, x, y, r, alpha = 1) {
     ctx.restore();
 }
 
-// --- 오디오: 벽 마찰(부딪침) 사운드 ---
-function ensureWallRubAudioElement() {
-    const wr = state.audio.wallRub;
-    if (wr.el) return wr.el;
-    const el = new Audio(wr.src);
-    // 끝 2초를 스킵해야 하므로 loop는 수동 처리
-    el.loop = false;
-    el.preload = 'auto';
-    el.muted = false;
-    el.volume = 0;
-    // playbackRate로 피치를 올릴 수 있게(브라우저별 preservesPitch 옵션 OFF)
-    try { el.preservesPitch = false; } catch { /* ignore */ }
-    try { el.mozPreservesPitch = false; } catch { /* ignore */ }
-    try { el.webkitPreservesPitch = false; } catch { /* ignore */ }
-
-    // 디버깅에 도움되는 에러 로그(문제 발생 시 콘솔에서 원인 확인 가능)
-    el.addEventListener('error', () => {
-        try { console.warn('[wallRub] audio error', el.error, wr.src); } catch { /* ignore */ }
-    });
-    wr.el = el;
-    return el;
-}
-
-function ensureSfxContext() {
-    const sfx = state.audio.sfx;
-    if (sfx.ctx) return sfx.ctx;
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return null;
-    sfx.ctx = new Ctx();
-    return sfx.ctx;
-}
-
-// --- BGM ---
-function ensureBgmElement() {
-    const bgm = state.audio.bgm;
-    if (bgm.el) return bgm.el;
-    const el = new Audio();
-    el.preload = 'auto';
-    el.loop = false;
-    el.volume = Math.max(0, Math.min(1, bgm.volume ?? 0.35));
-    el.addEventListener('ended', () => {
-        playNextBgmTrack();
-    });
-    el.addEventListener('error', () => {
-        try { console.warn('[bgm] audio error', el.error); } catch { /* ignore */ }
-    });
-    bgm.el = el;
-    return el;
-}
-
-function pickNextBgmIndex() {
-    const bgm = state.audio.bgm;
-    const n = bgm.tracks?.length || 0;
-    if (!n) return 0;
-    if (bgm.shuffle) {
-        // 같은 곡 연속 방지
-        let next = Math.floor(Math.random() * n);
-        if (n > 1 && next === bgm.idx) next = (next + 1) % n;
-        return next;
-    }
-    return (bgm.idx + 1) % n;
-}
-
-function startBgmIfNeeded() {
-    const bgm = state.audio.bgm;
-    if (bgm.started) return;
-    if (!state.audio.gestureUnlocked) return; // 유저 제스처 이후
-    if (!bgm.tracks?.length) return;
-
-    bgm.started = true;
-    // 첫 곡 시작
-    playBgmAtIndex(bgm.idx || 0);
-}
-
-function playBgmAtIndex(i) {
-    const bgm = state.audio.bgm;
-    const el = ensureBgmElement();
-    const n = bgm.tracks?.length || 0;
-    if (!n) return;
-    bgm.idx = Math.max(0, Math.min(n - 1, i));
-    
-    // 특정 파일 재생 중일 수 있으므로 루프 속성 체크
-    el.loop = false;
-    el.src = bgm.tracks[bgm.idx];
-    el.volume = Math.max(0, Math.min(1, bgm.volume ?? 0.35));
-    const p = el.play();
-    if (p && typeof p.catch === 'function') p.catch(() => { /* ignore */ });
-}
-
-function playBgmFile(src, loop = false) {
-    const bgm = state.audio.bgm;
-    const el = ensureBgmElement();
-    el.src = src;
-    el.loop = loop;
-    el.volume = Math.max(0, Math.min(1, bgm.volume ?? 0.35));
-    const p = el.play();
-    if (p && typeof p.catch === 'function') p.catch(() => { /* ignore */ });
-}
-
-function playNextBgmTrack() {
-    const bgm = state.audio.bgm;
-    if (!bgm.tracks?.length) return;
-    
-    // 상점 모달이 열려있는 동안은 일반 BGM 자동 재생 방지 (레벨업 효과음 재생 후 정적 유지)
-    if (state.ui.modalOpen) return;
-
-    // bgm 폴더 내 무작위 재생 강화
-    let next;
-    if (bgm.tracks.length > 1) {
-        do {
-            next = Math.floor(Math.random() * bgm.tracks.length);
-        } while (next === bgm.idx);
-    } else {
-        next = 0;
-    }
-    
-    playBgmAtIndex(next);
-}
-
-function setBgmVolume(v01) {
-    const bgm = state.audio.bgm;
-    bgm.volume = Math.max(0, Math.min(1, v01));
-    if (bgm.el) bgm.el.volume = bgm.volume;
-}
-
-async function loadSfxBuffer(src) {
-    const sfx = state.audio.sfx;
-    if (sfx.bufferCache.has(src)) return sfx.bufferCache.get(src);
-    const ctx = ensureSfxContext();
-    if (!ctx) return null;
-
-    // file:// 프로토콜 또는 origin이 null인 경우 fetch가 제한되므로 Audio fallback 유도
-    const isLocal = location.protocol === 'file:' || location.origin === 'null' || !location.origin || location.protocol === 'about:';
-    if (isLocal) return null;
-
-    try {
-        const res = await fetch(src);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const arr = await res.arrayBuffer();
-        const buf = await ctx.decodeAudioData(arr);
-        sfx.bufferCache.set(src, buf);
-        return buf;
-    } catch (e) {
-        // 이미 fallback이 준비되어 있으므로 경고는 최소화
-        return null;
-    }
-}
-
-function playSfx(src, opts = {}) {
-    // SFX는 wallRub 언락과 별개로 "유저 제스처"만 있으면 재생 가능
-    if (!state.audio.gestureUnlocked) return;
-    const {
-        volume = 1.0,
-        rate = 1.0,
-    } = opts;
-
-    const ctx = ensureSfxContext();
-
-    const playViaPlainAudioElement = () => {
-        // 폴백: WebAudio가 없거나(fetch/decode 실패 포함) 환경에서도 즉시 재생
-        try {
-            const a = new Audio(src);
-            a.volume = Math.max(0, Math.min(1, volume * (state.audio.sfx.master ?? 1)));
-            a.playbackRate = Math.max(0.5, Math.min(2.0, rate));
-            a.play().catch(() => {});
-        } catch { /* ignore */ }
-    };
-
-    if (!ctx) return playViaPlainAudioElement();
-
-    // 중요: 캐시 미스일 때 "로딩 완료 후 재생"을 하면 몇 초 뒤에 늦게 울리는 버그가 생김.
-    // 따라서 캐시에 없으면 즉시 Audio 엘리먼트로 재생하고, WebAudio 버퍼는 예열만 한다.
-    const cached = state.audio.sfx.bufferCache.get(src);
-    if (!cached) {
-        playViaPlainAudioElement();
-        // 예열(완료 시 자동 재생 금지)
-        loadSfxBuffer(src).catch(() => {});
-        return;
-    }
-
-    // 캐시 히트면 WebAudio로 즉시 재생(지연 없음)
-    try {
-        if (ctx.state === 'suspended') {
-            const rp = ctx.resume();
-            if (rp && typeof rp.catch === 'function') rp.catch(() => {});
-        }
-        const srcNode = ctx.createBufferSource();
-        srcNode.buffer = cached;
-        srcNode.playbackRate.value = Math.max(0.5, Math.min(2.0, rate));
-
-        const gain = ctx.createGain();
-        const v = Math.max(0, Math.min(1, volume * (state.audio.sfx.master ?? 1)));
-        gain.gain.value = v;
-
-        srcNode.connect(gain);
-        gain.connect(ctx.destination);
-        srcNode.start();
-    } catch {
-        // WebAudio 재생이 실패하면 즉시 폴백
-        playViaPlainAudioElement();
-    }
-}
-
-function unlockAudioOnce() {
-    // 유저 제스처가 들어온 순간부터 SFX는 재생 가능
-    state.audio.gestureUnlocked = true;
-    if (state.audio.unlocked) return;
-    try {
-        const el = ensureWallRubAudioElement();
-        ensureSfxContext();
-        // SFX는 첫 재생 지연을 없애기 위해 예열(완료 시 자동 재생 없음)
-        loadSfxBuffer('resource/missile-launch.mp3').catch(() => {});
-        loadSfxBuffer('resource/missile-explosion-168600.mp3').catch(() => {});
-        loadSfxBuffer('resource/small-rock-break-194553.mp3').catch(() => {});
-        loadSfxBuffer('resource/rock-break-hard-184891.mp3').catch(() => {});
-        loadSfxBuffer('resource/pick-coin-384921.mp3').catch(() => {});
-        loadSfxBuffer('resource/pick_missile-83043.mp3').catch(() => {});
-        // 상점 BGM 예열
-        new Audio('resource/cute-level-up-2-189851.mp3').preload = 'auto';
-        // BGM도 유저 제스처 이후 시작
-        startBgmIfNeeded();
-        if (state.audio.sfx.ctx && state.audio.sfx.ctx.state === 'suspended') {
-            const rp = state.audio.sfx.ctx.resume();
-            if (rp && typeof rp.catch === 'function') rp.catch(() => { /* ignore */ });
-        }
-        // 유저 제스처에서 "실제 play 성공"해야만 unlocked로 인정 (실패 시 다음 입력에서 재시도)
-        el.volume = 0;
-        const p = el.play();
-        if (p && typeof p.then === 'function') {
-            p.then(() => {
-                state.audio.unlocked = true;
-                state.audio.wallRub.playing = true;
-                // 여기서는 바로 끄지 않고 0볼륨으로 유지(정책 회피 + 즉시 페이드인 가능)
-            }).catch((err) => {
-                try { console.warn('[audio] unlock failed', err); } catch { /* ignore */ }
-                state.audio.unlocked = false;
-            });
-        } else {
-            // Promise가 없는 환경이면 일단 unlocked 처리
-            state.audio.unlocked = true;
-            state.audio.wallRub.playing = true;
-        }
-    } catch (err) {
-        try { console.warn('[audio] unlock exception', err); } catch { /* ignore */ }
-        state.audio.unlocked = false;
-    }
-}
-
-function startWallRubFade(mode, toVol, durMs) {
-    const wr = state.audio.wallRub;
-    const el = ensureWallRubAudioElement();
-    const from = Math.max(0, Math.min(1, el.volume || 0));
-    wr.fadeMode = mode;
-    wr.fadeStartMs = state.nowMs;
-    wr.fadeDurMs = durMs;
-    wr.fadeFrom = from;
-    wr.fadeTo = Math.max(0, Math.min(1, toVol));
-}
-
-function tickWallRubAudio(nowMs) {
-    const wr = state.audio.wallRub;
-    const el = wr.el;
-    if (!el) return;
-
-    // 피치(=playbackRate) 스무딩 적용
-    const s = Math.max(0, Math.min(1, wr.rateSmoothing ?? 0.18));
-    wr.rateCurrent = (wr.rateCurrent ?? 1) + ((wr.rateTarget ?? 1) - (wr.rateCurrent ?? 1)) * s;
-    const pr = Math.max(0.5, Math.min(2.0, wr.rateCurrent));
-    if (el.playbackRate !== pr) {
-        try { el.playbackRate = pr; } catch { /* ignore */ }
-    }
-
-    // 루프 구간 제어: 마지막 2초(tailSkipSec)는 사용하지 않음
-    const dur = el.duration;
-    const pad = Math.max(0, wr.tailSkipSec || 0);
-    if (wr.playing && Number.isFinite(dur) && dur > pad + 0.1) {
-        const loopEnd = dur - pad;
-        // 끝부분에 닿으면 0으로 되감아 반복
-        if (el.currentTime >= loopEnd) {
-            try { el.currentTime = 0; } catch { /* ignore */ }
-        }
-    }
-
-    // 페이드 진행
-    if (wr.fadeMode !== 'none') {
-        const tRaw = (nowMs - wr.fadeStartMs) / (wr.fadeDurMs || 1);
-        const t = easeInOutCubic(tRaw);
-        el.volume = wr.fadeFrom + (wr.fadeTo - wr.fadeFrom) * t;
-        if (tRaw >= 1) {
-            el.volume = wr.fadeTo;
-            const endedMode = wr.fadeMode;
-            wr.fadeMode = 'none';
-            if (endedMode === 'out' && el.volume <= 0.0001) {
-                try { el.pause(); } catch { /* ignore */ }
-                wr.playing = false;
-                try { el.currentTime = 0; } catch { /* ignore */ }
-            }
-        }
-    }
-}
-
-function setWallRubContact(isContact, intensity = 1) {
-    const wr = state.audio.wallRub;
-    if (!state.audio.unlocked) return;
-    const el = ensureWallRubAudioElement();
-
-    if (isContact) {
-        // 강도에 따라 볼륨 스케일
-        const k = Math.max(0, Math.min(1, intensity));
-        const target = wr.baseVolume * (0.20 + 0.80 * k);
-        // 강도에 따라 피치(살짝 상승)
-        wr.rateTarget = (wr.rateBase ?? 1.0) + (wr.rateMaxUp ?? 0.12) * k;
-
-        // 필요하면 재생 시작(처음 접촉 시에만 currentTime 리셋)
-        if (!wr.playing) {
-            try { el.currentTime = 0; } catch { /* ignore */ }
-            el.volume = 0;
-            // 시작 시 피치도 초기화
-            wr.rateCurrent = wr.rateTarget;
-            try { el.playbackRate = wr.rateCurrent; } catch { /* ignore */ }
-            const p = el.play();
-            wr.playing = true;
-            if (p && typeof p.catch === 'function') p.catch(() => { /* ignore */ });
-        } else {
-            // 혹시 pause된 상태면 다시 play 시도(정책/탭 상태 등)
-            if (el.paused) {
-                const p = el.play();
-                if (p && typeof p.catch === 'function') p.catch(() => { /* ignore */ });
-            }
-        }
-
-        // 페이드아웃 중 재접촉: 디졸브 취소
-        if (wr.fadeMode === 'out') wr.fadeMode = 'none';
-
-        // 매 프레임 페이드를 "재시작"하면 볼륨이 0 근처에서 계속 리셋될 수 있으므로,
-        // 볼륨/상태가 바뀌는 순간에만 페이드인 트리거.
-        const eps = 0.02;
-        if (wr.fadeMode !== 'in') {
-            if (el.volume < target - eps) startWallRubFade('in', target, 90);
-            else el.volume = target;
-        } else {
-            // 이미 페이드인 중이면 목표만 상향(더 세게 문댈 때)
-            if (wr.fadeTo < target) wr.fadeTo = target;
-        }
-    } else {
-        // 접촉 해제 시 피치를 기본으로 복귀(페이드아웃 중에도 천천히 내려감)
-        wr.rateTarget = (wr.rateBase ?? 1.0);
-        // 떨어졌으면 0.5초 디졸브(페이드아웃) 후 정지
-        if (wr.playing && wr.fadeMode !== 'out') {
-            startWallRubFade('out', 0, wr.fadeDurMs || 100);
-        }
-    }
-}
+// 오디오 로직은 `audio.js`로 분리되었습니다.
 
 // --- 드로잉: 플레이어(에너지 오브/나선환) ---
 // 렉 방지: 복잡한 궤적 계산/선분 렌더를 매 프레임 하지 않고,
@@ -1507,6 +1077,9 @@ function applyPlayerHit({ livesLoss = 1, canUseShield = true, flashA = 0.25, fla
     fxShake(shake);
     if (sfx) playSfx(sfx, { volume: 0.9 });
     updateUI();
+    if (state.player.lives <= 0 && !state.ui.gameOverOpen) {
+        openGameOverModal();
+    }
     return { applied: true, blockedBy: null };
 }
 
@@ -1646,11 +1219,20 @@ class Chunk {
                     }
                     // 중앙 십자형 구조물 (mid 변수 확실히 사용)
                     if (Math.abs(x - mid) < 2 && Math.abs(y - mid) < 2) continue; // 중앙 비움
-                    if ((x === mid || x === mid-1 || x === mid+1) && (y < 4 || y > size - 5)) grid[y][x] = 1;
+                    // 남쪽(하단)에는 구조물을 두지 않도록: 상단(y < 4)쪽에만 세로 구조물 배치
+                    if ((x === mid || x === mid-1 || x === mid+1) && (y < 4)) grid[y][x] = 1;
                     if ((y === mid || y === mid-1 || y === mid+1) && (x < 4 || x > size - 5)) grid[y][x] = 1;
                     
                     // 4개의 모서리 블록
-                    if ((x === 4 || x === size - 5) && (y === 4 || y === size - 5)) grid[y][x] = 1;
+                    // 남쪽 모서리 블록(y === size-5)은 제거하고, 북쪽(y === 4)만 유지
+                    if ((x === 4 || x === size - 5) && (y === 4)) grid[y][x] = 1;
+                }
+            }
+
+            // 남쪽(하단) 내부는 완전히 비우기: 경계(0/size-1)는 유지하고 내부만 클리어
+            for (let y = Math.max(1, size - 4); y <= size - 2; y++) {
+                for (let x = 1; x <= size - 2; x++) {
+                    grid[y][x] = 0;
                 }
             }
         } else {
@@ -1725,6 +1307,7 @@ function init() {
     initAbilityModalUI();
     initSettingsModalUI();
     initTitleScreenUI();
+    initGameOverUI();
 
     // 디버그 모드 설정
     if (CONFIG.DEBUG) {
@@ -1755,583 +1338,44 @@ function initTitleScreenUI() {
         if (state.ui.started) return;
         state.ui.started = true;
         el.classList.add('hidden');
+        // 런 시작 시간/최고 층 초기화
+        state.ui.runStartMs = state.nowMs;
+        state.ui.maxFloorReached = Math.max(1, getFloor());
+        state.ui.bossKills = Math.max(0, Math.floor(state.ui.bossKills ?? 0));
+        closeGameOverModal();
         updateUI();
         // 첫 입력 이후 BGM 시작
         playNextBgmTrack();
     };
 
     if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); start(); });
-    window.addEventListener('keydown', () => start(), { once: true });
-    // 타이틀 오버레이가 캔버스를 덮으므로, 오버레이 자체에서도 클릭으로 시작되게 처리
-    el.addEventListener('click', (e) => { e.preventDefault(); start(); }, { once: true });
-    el.addEventListener('touchstart', (e) => { e.preventDefault(); start(); }, { once: true, passive: false });
-}
 
-function initAbilityModalUI() {
-    const modal = document.getElementById('ability-modal');
-    const rerollBtn = document.getElementById('ability-reroll');
-    const skipBtn = document.getElementById('ability-skip');
-    const rerollCostEl = document.getElementById('ability-reroll-cost');
+    // 로그인 입력창이 추가되었으므로, "키 입력"으로 시작할 때는 입력 포커스면 무시해야 함.
+    const onKeyDownStart = (e) => {
+        const ae = document.activeElement;
+        const tag = (ae?.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        start();
+        window.removeEventListener('keydown', onKeyDownStart);
+    };
+    window.addEventListener('keydown', onKeyDownStart);
 
-    if (!modal || !rerollBtn || !skipBtn) return;
-
-    rerollBtn.addEventListener('click', () => {
-        if (!state.ui.modalOpen) return;
-        const cost = state.ui.abilityRerollCost;
-        if (state.coins < cost) return;
-        state.coins -= cost;
-        state.ui.abilityRerollCost += 1; // 리롤할 때마다 비용 증가
-        state.ui.boughtAbilities.clear(); // 리롤하면 다시 구매 가능
-        rollAbilityChoices();
-        
-        // 현재 표시 중인 층수를 유지하기 위해 텍스트에서 추출하거나 state에서 가져옴
-        const floorText = document.getElementById('ability-floor')?.textContent;
-        const floor = floorText ? parseInt(floorText) : getFloor();
-        renderAbilityModal(floor);
+    // 오버레이 클릭으로 시작: 카드 내부 클릭(로그인/버튼 등)은 무시
+    el.addEventListener('click', (e) => {
+        const insideCard = !!e.target?.closest?.('.title-card');
+        if (insideCard) return;
+        e.preventDefault();
+        start();
     });
-
-    skipBtn.addEventListener('click', () => {
-        closeAbilityModal();
-    });
+    el.addEventListener('touchstart', (e) => {
+        const insideCard = !!e.target?.closest?.('.title-card');
+        if (insideCard) return;
+        e.preventDefault();
+        start();
+    }, { passive: false });
 }
 
-function initSettingsModalUI() {
-    const modal = document.getElementById('settings-modal');
-    const closeBtn = document.getElementById('settings-close');
-    const sfxSlider = document.getElementById('settings-sfx');
-    const bgmSlider = document.getElementById('settings-bgm');
-    const sfxVal = document.getElementById('settings-sfx-val');
-    const bgmVal = document.getElementById('settings-bgm-val');
-
-    if (!modal || !closeBtn || !sfxSlider || !bgmSlider || !sfxVal || !bgmVal) return;
-
-    const render = () => {
-        const sfxPct = Math.round((state.audio.sfx.master ?? 0.85) * 100);
-        const bgmPct = Math.round((state.audio.bgm.volume ?? 0.35) * 100);
-        sfxSlider.value = String(sfxPct);
-        bgmSlider.value = String(bgmPct);
-        sfxVal.textContent = `${sfxPct}%`;
-        bgmVal.textContent = `${bgmPct}%`;
-    };
-
-    const setSfx = (pct) => {
-        const v = Math.max(0, Math.min(100, pct)) / 100;
-        state.audio.sfx.master = v;
-        sfxVal.textContent = `${Math.round(v * 100)}%`;
-    };
-
-    const setBgm = (pct) => {
-        const v = Math.max(0, Math.min(100, pct)) / 100;
-        setBgmVolume(v);
-        bgmVal.textContent = `${Math.round(v * 100)}%`;
-    };
-
-    sfxSlider.addEventListener('input', () => setSfx(Number(sfxSlider.value)));
-    bgmSlider.addEventListener('input', () => setBgm(Number(bgmSlider.value)));
-
-    closeBtn.addEventListener('click', () => closeSettingsModal());
-
-    render();
-}
-
-function openSettingsModal() {
-    const modal = document.getElementById('settings-modal');
-    if (modal) modal.classList.remove('hidden');
-    state.ui.settingsOpen = true;
-}
-
-function closeSettingsModal() {
-    const modal = document.getElementById('settings-modal');
-    if (modal) modal.classList.add('hidden');
-    state.ui.settingsOpen = false;
-}
-
-function toggleSettingsModal() {
-    if (state.ui.settingsOpen) closeSettingsModal();
-    else openSettingsModal();
-}
-
-const ABILITY_DEFS = [
-    {
-        id: 'wall_break',
-        name: '벽부수기 능력',
-        desc: '벽을 마찰시키면 달아오르며 부술 수 있습니다.',
-        rarity: 'EPIC',
-        cost: 15,
-        available: () => !state.abilities.wallBreakUnlocked,
-        apply: () => { state.abilities.wallBreakUnlocked = true; },
-    },
-    {
-        id: 'wall_break_speed',
-        name: '벽부수기 속도 +10%',
-        desc: `벽을 더 빠르게 부숩니다. (MAX x${CONFIG.MAX_WALL_BREAK_SPEED_MULT})`,
-        rarity: 'RARE',
-        cost: 5,
-        // 예전에는 wallBreakUnlocked가 false면 "아예 뽑히지 않아서" 누락처럼 보였음.
-        // 이제는 뽑힐 수는 있게 하되(설명/잠김 표시), 구매는 선행 조건을 만족해야 가능하게 합니다.
-        available: () => state.abilities.wallBreakSpeedMult < CONFIG.MAX_WALL_BREAK_SPEED_MULT,
-        requires: () => !!state.abilities.wallBreakUnlocked,
-        lockedText: '선행: 벽부수기 능력 필요',
-        apply: () => {
-            state.abilities.wallBreakSpeedMult = Math.min(CONFIG.MAX_WALL_BREAK_SPEED_MULT, state.abilities.wallBreakSpeedMult + 0.1);
-        },
-    },
-    {
-        id: 'missile_spawn',
-        name: '미사일 아이템 확률 +5%',
-        desc: `미사일 아이템 등장 확률이 5% 증가합니다. (MAX x${CONFIG.MAX_MISSILE_SPAWN_CHANCE_MULT})`,
-        rarity: 'COMMON',
-        cost: 3,
-        available: () => state.abilities.missileSpawnChanceMult < CONFIG.MAX_MISSILE_SPAWN_CHANCE_MULT,
-        apply: () => {
-            state.abilities.missileSpawnChanceMult = Math.min(CONFIG.MAX_MISSILE_SPAWN_CHANCE_MULT, state.abilities.missileSpawnChanceMult + 0.05);
-        },
-    },
-    {
-        id: 'coin_field_spawn',
-        name: '코인 확률 증가',
-        desc: '필드 내 코인 등장 확률 증가(+15%). 최대 코인 개수도 증가합니다. (최대 20회)',
-        rarity: 'RARE',
-        cost: 5,
-        available: () => (state.abilities.coinFieldSpawnBonus ?? 0) < 3.0,
-        apply: () => {
-            state.abilities.coinFieldSpawnBonus = Math.min(3.0, (state.abilities.coinFieldSpawnBonus ?? 0) + 0.15);
-        },
-    },
-    {
-        id: 'missile_field_spawn',
-        name: '미사일 확률 증가',
-        desc: '필드 내 미사일 아이템 등장 확률 +2.5% (최대 +100%). 최초 획득 시 필드 내 최대 5개까지 등장.',
-        rarity: 'EPIC',
-        cost: 15,
-        available: () => (state.abilities.missileFieldSpawnBonus ?? 0) < 1.0,
-        apply: () => {
-            const cur = state.abilities.missileFieldSpawnBonus ?? 0;
-            if ((state.abilities.maxFieldMissileItems ?? 1) < 5) state.abilities.maxFieldMissileItems = 5;
-            state.abilities.missileFieldSpawnBonus = Math.min(1.0, cur + 0.025);
-        },
-    },
-    {
-        id: 'missile_stun',
-        name: '미사일 스턴 +0.2초',
-        desc: '미사일로 기절시키는 시간이 0.2초 증가합니다. (Max 5초)',
-        rarity: 'COMMON',
-        cost: 3,
-        available: () => state.abilities.missileStunBonusMs < CONFIG.MAX_MISSILE_STUN_BONUS_MS,
-        apply: () => {
-            state.abilities.missileStunBonusMs = Math.min(CONFIG.MAX_MISSILE_STUN_BONUS_MS, state.abilities.missileStunBonusMs + 200);
-        },
-    },
-    {
-        id: 'missile_count',
-        name: '미사일 투사체 +1',
-        desc: '미사일 발사 시 투사체 개수가 1개 늘어납니다. (Max 5개)',
-        rarity: 'EPIC',
-        cost: 15,
-        available: () => state.abilities.missileCount < CONFIG.MAX_MISSILE_COUNT,
-        apply: () => {
-            state.abilities.missileCount = Math.min(CONFIG.MAX_MISSILE_COUNT, state.abilities.missileCount + 1);
-        },
-    },
-    {
-        id: 'move_speed',
-        name: '이동속도 +2.5%',
-        desc: `이동 속도가 2.5% 증가합니다. (MAX x${CONFIG.MAX_MOVE_SPEED_MULT})`,
-        rarity: 'COMMON',
-        cost: 3,
-        available: () => state.abilities.moveSpeedMult < CONFIG.MAX_MOVE_SPEED_MULT,
-        apply: () => {
-            state.abilities.moveSpeedMult = Math.min(CONFIG.MAX_MOVE_SPEED_MULT, state.abilities.moveSpeedMult + 0.025);
-        },
-    },
-    {
-        id: 'gold_wall',
-        name: '코인 벽',
-        desc: '코인이 포함된 벽이 생성될 확률 + 1% (MIN 10%, MAX 25%)',
-        rarity: 'EPIC',
-        cost: 10,
-        available: () => !state.abilities.goldWallUnlocked || state.abilities.goldWallProb < 0.25,
-        apply: () => {
-            if (!state.abilities.goldWallUnlocked) {
-                state.abilities.goldWallUnlocked = true;
-                state.abilities.goldWallProb = Math.max(0.10, state.abilities.goldWallProb || 0);
-                state.abilities.coinWallCoinAmount = state.abilities.coinWallCoinAmount ?? 5;
-            } else {
-                state.abilities.goldWallProb = Math.min(0.25, (state.abilities.goldWallProb || 0) + 0.01);
-            }
-        },
-    },
-    {
-        id: 'coin_wall_coin_plus',
-        name: '코인 벽 코인 +1',
-        desc: '코인 벽(사금벽) 파괴 시 코인 획득량 +1 (기본 5에서 증가)',
-        rarity: 'COMMON',
-        cost: 3,
-        available: () => true,
-        requires: () => !!state.abilities.goldWallUnlocked,
-        lockedText: '선행: 코인 벽 필요',
-        apply: () => {
-            state.abilities.coinWallCoinAmount = (state.abilities.coinWallCoinAmount ?? 5) + 1;
-        },
-    },
-    {
-        id: 'coin_gain_plus',
-        name: '코인 획득량 +1',
-        desc: '코인을 얻을 때마다 추가로 +1을 더 획득합니다.',
-        rarity: 'COMMON',
-        cost: 3,
-        available: () => true,
-        apply: () => {
-            state.abilities.coinGainBonus = (state.abilities.coinGainBonus ?? 0) + 1;
-        },
-    },
-    {
-        id: 'missile_wall_break',
-        name: '벽파괴 미사일',
-        desc: '미사일이 벽에 부딪힐 때 일정 확률로 벽을 파괴합니다.',
-        rarity: 'EPIC',
-        cost: 20,
-        available: () => true,
-        apply: () => {
-            if (!state.abilities.missileWallBreakUnlocked) {
-                state.abilities.missileWallBreakUnlocked = true;
-            } else {
-                state.abilities.missileWallBreakProb += 0.01;
-            }
-        },
-    },
-    {
-        id: 'talisman',
-        name: '부적',
-        desc: '일반 확률 -6%, 희귀+3%, 영웅+2.5%, 전설+0.5% 증가 (최대 3회)',
-        rarity: 'LEGENDARY',
-        cost: 20,
-        available: () => state.abilities.talismanCount < 3,
-        apply: () => {
-            state.abilities.rarityBonus.COMMON -= 0.06;
-            state.abilities.rarityBonus.RARE += 0.03;
-            state.abilities.rarityBonus.EPIC += 0.025;
-            state.abilities.rarityBonus.LEGENDARY += 0.005;
-            state.abilities.talismanCount++;
-        },
-    },
-    {
-        id: 'shop_slot',
-        name: '상점 슬롯 +1',
-        desc: '어빌리티 선택창의 슬롯이 1개 증가합니다. (최대 6개)',
-        rarity: 'LEGENDARY',
-        cost: 30,
-        available: () => state.abilities.shopSlots < CONFIG.MAX_SHOP_SLOTS,
-        apply: () => {
-            state.abilities.shopSlots = Math.min(CONFIG.MAX_SHOP_SLOTS, state.abilities.shopSlots + 1);
-        },
-    },
-    {
-        id: 'missile_gunpowder',
-        name: '화약 벽 (강화 화약)',
-        desc: '벽을 부수면 강화 화약을 얻을 확률이 증가합니다. (MIN 10%, MAX 20%)',
-        rarity: 'RARE',
-        cost: 5,
-        available: () => (state.abilities.missileGunpowderProb ?? 0) < 0.20,
-        apply: () => {
-            const cur = state.abilities.missileGunpowderProb ?? 0;
-            if (cur <= 0) state.abilities.missileGunpowderProb = 0.10;
-            else state.abilities.missileGunpowderProb = Math.min(0.20, cur + 0.01);
-            // 확률이 변했으므로 모든 청크의 미로 텍스처 무효화(화약 점 표시 갱신)
-            state.chunks.forEach(c => c.mazeTex = null);
-        },
-    },
-    {
-        id: 'weaken_wall_common',
-        name: '일반 벽 약화',
-        desc: '갈색/파랑/녹색 벽 내구도 1% 감소',
-        rarity: 'COMMON',
-        cost: 3,
-        available: () => true,
-        apply: () => {
-            state.abilities.wallDurabilityMultCommon = Math.max(0.10, (state.abilities.wallDurabilityMultCommon ?? 1.0) * 0.99);
-        },
-    },
-    {
-        id: 'weaken_wall_rare',
-        name: '희귀 벽 약화',
-        desc: '보라/노랑/주황 벽 내구도 1% 감소',
-        rarity: 'RARE',
-        cost: 5,
-        available: () => true,
-        apply: () => {
-            state.abilities.wallDurabilityMultRare = Math.max(0.10, (state.abilities.wallDurabilityMultRare ?? 1.0) * 0.99);
-        },
-    },
-    {
-        id: 'weaken_wall_epic',
-        name: '영웅 벽 약화',
-        desc: '회색/흰색 벽 내구도 1% 감소',
-        rarity: 'EPIC',
-        cost: 15,
-        available: () => true,
-        apply: () => {
-            state.abilities.wallDurabilityMultEpic = Math.max(0.10, (state.abilities.wallDurabilityMultEpic ?? 1.0) * 0.99);
-        },
-    },
-    {
-        id: 'weaken_wall_legendary',
-        name: '전설 벽 약화',
-        desc: '검정(레벨) 벽 내구도 1% 감소',
-        rarity: 'LEGENDARY',
-        cost: 30,
-        available: () => true,
-        apply: () => {
-            state.abilities.wallDurabilityMultLegendary = Math.max(0.10, (state.abilities.wallDurabilityMultLegendary ?? 1.0) * 0.99);
-        },
-    },
-    {
-        id: 'gain_life',
-        name: '목숨 +1',
-        desc: '하트를 1개 회복합니다.',
-        rarity: 'COMMON',
-        cost: 5,
-        available: () => state.player.lives < state.abilities.maxLives, // 최대 체력이면 구매 불가
-        apply: () => {
-            state.player.lives = Math.min(state.abilities.maxLives, state.player.lives + 1);
-        },
-    },
-    {
-        id: 'max_lives',
-        name: '최대 목숨 증가 +1',
-        desc: '최대 하트 개수가 1개 늘어납니다. (최대 10회)',
-        rarity: 'EPIC',
-        cost: 20,
-        available: () => (state.abilities.maxLives - 3) < 10,
-        apply: () => {
-            state.abilities.maxLives++;
-            state.player.lives++;
-        },
-    },
-    {
-        id: 'lethal_missile',
-        name: '살상 미사일',
-        desc: '미사일이 추격자를 파괴할 수 있습니다. (다음 맵에서 무작위 부활)',
-        rarity: 'LEGENDARY',
-        cost: 30,
-        available: () => !state.abilities.killMissileUnlocked,
-        apply: () => {
-            state.abilities.killMissileUnlocked = true;
-        },
-    },
-    {
-        id: 'shield',
-        name: '실드',
-        desc: '1회 피격 무효. 피격 후 1초 무적. 다음 청크로 넘어가면 최대치로 재충전됩니다. (최대 3개)',
-        rarity: 'LEGENDARY',
-        cost: 50,
-        available: () => (state.abilities.shieldMax ?? 0) < 3,
-        apply: () => {
-            state.abilities.shieldMax = Math.min(3, (state.abilities.shieldMax ?? 0) + 1);
-            // 구매 즉시 1개 지급(청크 내 자동 재충전은 없지만 구매는 "획득"으로 처리)
-            state.player.shieldCharges = Math.min(state.abilities.shieldMax, (state.player.shieldCharges ?? 0) + 1);
-        },
-    },
-    {
-        id: 'heart_drop',
-        name: '하트 드롭',
-        desc: '필드에 낮은 확률로 하트가 드롭됩니다. 획득 시 최대 체력까지 회복. (0.1%p씩 증가, 최대 10%)',
-        rarity: 'LEGENDARY',
-        cost: 50,
-        available: () => (state.abilities.heartDropChance ?? 0) < 0.10,
-        apply: () => {
-            state.abilities.heartDropChance = Math.min(0.10, (state.abilities.heartDropChance ?? 0) + 0.001);
-        },
-    },
-];
-
-function openAbilityModal(floor) {
-    state.ui.modalOpen = true;
-    // 화면은 월드로 두고(정지), 모달만 표시
-    state.mode = 'WORLD';
-    state.ui.abilityRerollCost = 1; // 층마다 리롤 비용 초기화
-    state.ui.boughtAbilities.clear();
-    rollAbilityChoices();
-    renderAbilityModal(floor);
-    const modal = document.getElementById('ability-modal');
-    if (modal) modal.classList.remove('hidden');
-
-    // 상점 진입 효과음 재생 (1회)
-    playBgmFile('resource/cute-level-up-2-189851.mp3', false);
-}
-
-function closeAbilityModal() {
-    const modal = document.getElementById('ability-modal');
-    if (modal) modal.classList.add('hidden');
-    state.ui.modalOpen = false;
-
-    // 대기 중인 청크 진입이 있으면 실행
-    if (state.ui.pendingEnter) {
-        const { x, y, entryDir } = state.ui.pendingEnter;
-        state.ui.pendingEnter = null;
-        enterMaze(x, y, entryDir);
-    } else {
-        // 만약 대기 중인 진입이 없는데 모드가 WORLD라면 MAZE로 복구 시도 (세이프가드)
-        if (state.mode === 'WORLD') {
-            state.mode = 'MAZE';
-        }
-    }
-    updateUI();
-
-    // 일반 게임 BGM으로 복귀 (다음 트랙 재생)
-    playNextBgmTrack();
-}
-
-function rollAbilityChoices() {
-    const choices = [];
-    const used = new Set();
-    const slotCount = state.abilities.shopSlots || 3;
-    const isEligible = (a) => a.available() && (typeof a.requires !== 'function' || !!a.requires());
-    
-    // 어빌리티 구매 시 추가금 계산용 카운트
-    const rarityCosts = { 'COMMON': 1, 'RARE': 2, 'EPIC': 5, 'LEGENDARY': 10 };
-    
-    // 슬롯 개수만큼 뽑기
-    for (let slot = 0; slot < slotCount; slot++) {
-        // 희귀도 결정
-        const r = Math.random();
-        const probs = CONFIG.RARITY_PROBS;
-        const bonus = state.abilities.rarityBonus;
-        
-        const pLeg = (probs.LEGENDARY + bonus.LEGENDARY);
-        const pEpic = pLeg + (probs.EPIC + bonus.EPIC);
-        const pRare = pEpic + (probs.RARE + bonus.RARE);
-        
-        let rarity = 'COMMON';
-        if (r < pLeg) rarity = 'LEGENDARY';
-        else if (r < pEpic) rarity = 'EPIC';
-        else if (r < pRare) rarity = 'RARE';
-        
-        // 해당 희귀도의 가능한 어빌리티 풀 구성
-        let pool = ABILITY_DEFS.filter(a => a.rarity === rarity && isEligible(a) && !used.has(a.id));
-        
-        // 만약 해당 희귀도에 남은 어빌리티가 없으면 하위 희귀도로 시도
-        if (pool.length === 0) {
-            const rarities = ['LEGENDARY', 'EPIC', 'RARE', 'COMMON'];
-            const curIdx = rarities.indexOf(rarity);
-            for (let i = curIdx + 1; i < rarities.length; i++) {
-                pool = ABILITY_DEFS.filter(a => a.rarity === rarities[i] && isEligible(a) && !used.has(a.id));
-                if (pool.length > 0) break;
-            }
-        }
-        
-        // 여전히 풀이 비어있다면(거의 불가능하지만) 전체 풀에서 가용한 것 중 하나
-        if (pool.length === 0) {
-            pool = ABILITY_DEFS.filter(a => isEligible(a) && !used.has(a.id));
-        }
-
-        if (pool.length > 0) {
-            const a = pool[Math.floor(Math.random() * pool.length)];
-            used.add(a.id);
-            choices.push(a.id);
-        }
-    }
-    state.ui.abilityChoices = choices;
-}
-
-function renderAbilityModal(floor = getFloor()) {
-    const coinsEl = document.getElementById('ability-coin-count');
-    const floorEl = document.getElementById('ability-floor');
-    const listEl = document.getElementById('ability-choices');
-    const rerollBtn = document.getElementById('ability-reroll');
-    const rerollCostEl = document.getElementById('ability-reroll-cost');
-    const statusEl = document.getElementById('ability-status');
-
-    if (coinsEl) coinsEl.textContent = String(state.coins);
-    if (floorEl) floorEl.textContent = String(floor);
-    if (rerollCostEl) rerollCostEl.textContent = String(state.ui.abilityRerollCost);
-    if (rerollBtn) rerollBtn.disabled = state.coins < state.ui.abilityRerollCost;
-
-    if (statusEl) {
-        const probs = CONFIG.RARITY_PROBS;
-        const bonus = state.abilities.rarityBonus;
-        const stats = [
-            { label: '이속 보너스', val: `+${((state.abilities.moveSpeedMult - 1) * 100).toFixed(1)}%` },
-            { label: '벽부수기 속도', val: `x${state.abilities.wallBreakSpeedMult.toFixed(2)}` },
-            { label: '미사일 확률', val: `x${state.abilities.missileSpawnChanceMult.toFixed(2)}` },
-            { label: '기절 보너스', val: `+${(state.abilities.missileStunBonusMs / 1000).toFixed(1)}s` },
-            { label: '미사일 투사체', val: `${state.abilities.missileCount}개` },
-            { label: '코인 벽 확률', val: state.abilities.goldWallUnlocked ? `${(state.abilities.goldWallProb * 100).toFixed(1)}%` : '잠김' },
-            { label: '코인 벽 코인', val: `${state.abilities.coinWallCoinAmount ?? 5}` },
-            { label: '코인 보너스', val: `+${state.abilities.coinGainBonus ?? 0}` },
-            { label: '강화 화약 확률', val: state.abilities.missileGunpowderProb > 0 ? `${(state.abilities.missileGunpowderProb * 100).toFixed(1)}%` : '잠김' },
-            { label: '실드', val: `${state.player.shieldCharges ?? 0}/${state.abilities.shieldMax ?? 0}` },
-            { label: '상점 슬롯', val: `${state.abilities.shopSlots}개` },
-            { label: '확률(일/희/영/전)', val: `${((probs.COMMON+bonus.COMMON)*100).toFixed(0)}/${((probs.RARE+bonus.RARE)*100).toFixed(0)}/${((probs.EPIC+bonus.EPIC)*100).toFixed(0)}/${((probs.LEGENDARY+bonus.LEGENDARY)*100).toFixed(1)}%` },
-        ];
-        statusEl.innerHTML = stats.map(s => `<div class="stat-item">${s.label}: <span class="stat-val">${s.val}</span></div>`).join('');
-    }
-
-    if (!listEl) return;
-    listEl.innerHTML = '';
-
-    for (const id of state.ui.abilityChoices) {
-        const def = ABILITY_DEFS.find(a => a.id === id);
-        if (!def) continue;
-
-        const isBought = state.ui.boughtAbilities.has(id);
-
-        const el = document.createElement('div');
-        el.className = `ability-choice rarity-${def.rarity.toLowerCase()}`;
-        if (isBought) el.style.opacity = '0.4';
-
-        const rarityBadge = document.createElement('div');
-        rarityBadge.className = `rarity-badge bg-${def.rarity.toLowerCase()}`;
-        rarityBadge.textContent = def.rarity === 'COMMON' ? '일반' : def.rarity === 'RARE' ? '희귀' : def.rarity === 'EPIC' ? '영웅' : '전설';
-
-        const name = document.createElement('div');
-        name.className = 'ability-name';
-        name.textContent = def.name;
-
-        const desc = document.createElement('div');
-        desc.className = 'ability-desc';
-        desc.textContent = def.desc;
-
-        const costEl = document.createElement('div');
-        const extraCost = (state.abilities.boughtCountByRarity[def.rarity] || 0) * (def.rarity === 'COMMON' ? 1 : def.rarity === 'RARE' ? 2 : def.rarity === 'EPIC' ? 5 : 10);
-        const finalCost = def.cost + extraCost;
-        const meetsReq = (typeof def.requires === 'function') ? !!def.requires() : true;
-        const canBuy = state.coins >= finalCost && def.available() && meetsReq && !isBought;
-
-        costEl.className = 'ability-cost';
-        costEl.textContent = `비용: ${finalCost}`;
-
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-buy';
-        btn.textContent = isBought
-            ? '구매 완료'
-            : (canBuy
-                ? '구매'
-                : (!meetsReq
-                    ? (def.lockedText || '잠김')
-                    : (def.available() ? '코인 부족' : '구매 불가')));
-        btn.disabled = !canBuy;
-        btn.addEventListener('click', () => {
-            if (!state.ui.modalOpen) return;
-            if (state.coins < finalCost) return;
-            if (!def.available() || state.ui.boughtAbilities.has(id)) return;
-            
-            state.coins -= finalCost;
-            state.abilities.boughtCountByRarity[def.rarity]++;
-            state.ui.boughtAbilities.add(id);
-            def.apply();
-            renderAbilityModal(floor);
-            updateUI();
-        });
-
-        el.appendChild(rarityBadge);
-        el.appendChild(name);
-        el.appendChild(desc);
-        el.appendChild(costEl);
-        el.appendChild(btn);
-        listEl.appendChild(el);
-    }
-}
+// 어빌리티(상점) UI는 `ui_ability.js`로 분리되었습니다.
 
 function resize() {
     const w = window.innerWidth;
@@ -2379,6 +1423,16 @@ function handleKeyDown(e) {
 
     // 타이틀 화면 중엔 게임 입력 차단(첫 입력은 타이틀 리스너에서 처리)
     if (!state.ui.started) return;
+
+    // 게임 오버 중에는 재시작 입력만 받음
+    if (state.ui.gameOverOpen) {
+        const k = (e.key || '').toLowerCase();
+        if (k === 'enter' || k === 'r') {
+            e.preventDefault();
+            window.location.reload();
+        }
+        return;
+    }
 
     // ESC: 설정창 토글(항상 우선 처리)
     if (e.key === 'Escape') {
@@ -2439,6 +1493,7 @@ function handleClick(e) {
     // 오디오 언락(브라우저 자동재생 정책 대응)
     unlockAudioOnce();
     if (!state.ui.started) return;
+    if (state.ui.gameOverOpen) return;
     if (state.ui.settingsOpen || state.ui.modalOpen) return;
     if (state.mode === 'WORLD') {
         const rect = canvas.getBoundingClientRect();
@@ -2494,6 +1549,18 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
     // 입장 방향에 따라 스폰 위치(한 칸 안쪽) 결정
     state.player.mazePos = getSpawnPosForEntry(entryDir);
     state.nextEntryDir = 'S'; // 기본값으로 되돌림(다음은 보통 남쪽에서 시작)
+
+    // 최고 층 기록
+    state.ui.maxFloorReached = Math.max(1, Math.floor(state.ui.maxFloorReached ?? 1), y + 1);
+
+    // 청크(맵) 전환 시 남아있는 투사체/예약발사 정리
+    // - 적 투사체(state.chaserProjectiles)가 다음 맵까지 남아있는 버그 방지
+    // - 플레이어 미사일/예약 발사도 좌표계가 바뀌므로 같이 정리
+    state.chaserProjectiles = [];
+    state.missiles = [];
+    state.pendingMissileShots = [];
+    // 보스 패턴(레이저)도 맵 전환 시 초기화
+    state.boss.lasers = [];
 
     // 추격자 부활 로직 (살상 미사일에 의해 파괴된 경우)
     if (state.chaser.active && state.chaser.deadUntilNextChunk) {
@@ -2771,6 +1838,8 @@ function resetAfterCaught() {
         // 실드가 있으면 1회 피격 무효 + 1초 무적
         applyPlayerHit({ livesLoss: 1, canUseShield: true, flashA: 0, shake: 0 });
     }
+    // 라이프가 0이면 게임오버로 넘어가므로 더 이상 리셋 로직 진행하지 않음
+    if (state.ui.gameOverOpen || (state.player.lives || 0) <= 0) return;
 
     // 현재 청크 입구로 플레이어 리셋
     state.player.mazePos = getSpawnPosForEntry(state.currentEntryDir);
@@ -2872,6 +1941,8 @@ function bfsPath(maze, start, goal) {
 function update(dt) {
     // 타이틀 화면 중에는 게임 로직을 진행하지 않음(렌더는 진행)
     if (!state.ui.started) return;
+    // 게임 오버 중에는 게임 로직 정지(렌더는 모달이 담당)
+    if (state.ui.gameOverOpen) return;
     // 프레임 시작: 마찰 접촉 플래그 및 마찰열 연출 리셋
     if (state.mode === 'MAZE') {
         state.audio.wallRubContactThisFrame = false;
@@ -3061,12 +2132,7 @@ function updateBoss(dt) {
             if (angleDiff < 0.1 && dist < 10) {
                 // 피격!
                 state.boss.lasers.splice(i, 1);
-                const res = applyPlayerHit({ livesLoss: 1, canUseShield: true, flashA: 0.5, shake: 4 });
-                if (res.applied && state.player.lives <= 0) {
-                    // 게임 오버 로직 (일단 리셋)
-                    state.player.lives = 3;
-                    resetAfterCaught();
-                }
+                applyPlayerHit({ livesLoss: 1, canUseShield: true, flashA: 0.5, shake: 4 });
             }
         }
     }
@@ -3194,11 +2260,14 @@ function updateChaser(dt) {
         });
     }
 
-    // 플레이어와 직접 충돌 체크 (스턴이나 이동 유예와 상관없이 체크)
+    // 플레이어와 직접 충돌 체크
+    // - 추격자가 "기절(stun)" 상태일 때는 몸박 데미지를 주지 않음
+    // - (기존에는 스턴/유예와 상관없이 체크해서, 스턴 중에도 데미지가 들어갈 수 있었음)
     const pdx = state.player.mazePos.x - state.chaser.pos.x;
     const pdy = state.player.mazePos.y - state.chaser.pos.y;
     const pdist = Math.sqrt(pdx*pdx + pdy*pdy);
-    if (pdist < (CONFIG.PLAYER_RADIUS + CONFIG.CHASER_RADIUS) * 0.8) {
+    const isStunned = state.nowMs < state.chaser.stunUntilMs;
+    if (!isStunned && pdist < (CONFIG.PLAYER_RADIUS + CONFIG.CHASER_RADIUS) * 0.8) {
         // 하트 1 감소 및 일시 무적(유예) 부여
         if (state.nowMs > state.chaser.graceUntilMs) {
             applyPlayerHit({
@@ -3588,6 +2657,7 @@ function onMissileHitTarget(m) {
         if (state.boss.hp <= 0) {
             state.boss.active = false;
             state.boss.lasers = []; // 레이저 즉시 제거
+            state.ui.bossKills = Math.max(0, Math.floor(state.ui.bossKills ?? 0)) + 1;
             const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
             if (chunk) chunk.cleared = true;
             addScore(1000, getFloor());
@@ -4258,10 +3328,7 @@ function drawWorld(cameraY = state.cameraY, opts = {}) {
         ctx.lineWidth = (state.currentChunk.x === chunk.x && state.currentChunk.y === chunk.y) ? 3 : 1;
         ctx.strokeRect(screenX + 5, screenY + 5, CONFIG.CHUNK_SIZE - 10, CONFIG.CHUNK_SIZE - 10);
         
-        // 청크 좌표 텍스트
-        ctx.fillStyle = '#555';
-        ctx.font = '10px Arial';
-        ctx.fillText(`(${chunk.x}, ${chunk.y})`, screenX + 15, screenY + 25);
+        // (삭제) 청크 좌표 텍스트
     });
 
     if (showPlayer) {

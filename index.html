@@ -17,18 +17,52 @@
             <div class="title-name">INFINITE MAZE</div>
             <div class="title-sub">미로를 돌파하고, 추격자를 피해 올라가세요.</div>
 
-            <div class="title-controls">
-                <div class="title-controls-title">조작법</div>
-                <div class="title-controls-grid">
-                    <div class="k">마우스</div><div class="v">이동 방향</div>
-                    <div class="k">Z</div><div class="v">조작 활성/비활성 토글</div>
-                    <div class="k">X</div><div class="v">미사일 발사</div>
-                    <div class="k">ESC</div><div class="v">설정</div>
+            <div class="title-layout">
+                <div class="title-left">
+                    <div class="title-controls">
+                        <div class="title-controls-title">조작법</div>
+                        <div class="title-controls-grid">
+                            <div class="k">마우스</div><div class="v">이동 방향</div>
+                            <div class="k">Z</div><div class="v">조작 활성/비활성 토글</div>
+                            <div class="k">X</div><div class="v">미사일 발사</div>
+                            <div class="k">ESC</div><div class="v">설정</div>
+                        </div>
+                    </div>
+
+                    <button id="title-start" class="btn btn-primary">아무 키나 누르시오 / 클릭하여 시작</button>
+                    <div class="title-hint">첫 입력(키/클릭) 이후 오디오가 재생됩니다.</div>
+                </div>
+
+                <div class="title-right">
+                    <div class="panel">
+                        <div class="panel-title">로그인</div>
+                        <div id="auth-status" class="panel-sub">로그인하면 점수가 리더보드에 기록됩니다.</div>
+
+                        <form id="auth-form" class="auth-form">
+                            <input id="auth-email" class="input" type="email" autocomplete="email" placeholder="이메일" required />
+                            <input id="auth-password" class="input" type="password" autocomplete="current-password" placeholder="비밀번호" required />
+                            <input id="auth-username" class="input" type="text" autocomplete="nickname" placeholder="닉네임(리더보드 표시용)" required />
+
+                            <div class="auth-actions">
+                                <button id="auth-signin" type="button" class="btn">로그인</button>
+                                <button id="auth-signup" type="button" class="btn btn-secondary">회원가입</button>
+                                <button id="auth-signout" type="button" class="btn hidden">로그아웃</button>
+                            </div>
+                        </form>
+                        <div id="auth-msg" class="panel-hint"></div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-title">리더보드 (TOP 10)</div>
+                        <div class="panel-sub">최고 점수 순</div>
+                        <div id="leaderboard" class="leaderboard">
+                            <div class="lb-row muted">불러오는 중...</div>
+                        </div>
+                        <div id="leaderboard-msg" class="panel-hint"></div>
+                    </div>
                 </div>
             </div>
 
-            <button id="title-start" class="btn btn-primary">아무 키나 누르시오 / 클릭하여 시작</button>
-            <div class="title-hint">첫 입력 이후 오디오가 재생됩니다.</div>
         </div>
     </div>
 
@@ -78,6 +112,37 @@
         </div>
     </div>
 
+    <!-- 게임 오버 화면 -->
+    <div id="gameover-modal" class="hidden" role="dialog" aria-modal="true" aria-label="게임 오버">
+        <div class="gameover-card">
+            <div class="gameover-title">GAME OVER</div>
+            <div class="gameover-sub">이번 런 요약</div>
+
+            <div class="gameover-grid">
+                <div class="k">최고 층</div><div class="v"><span id="gameover-floor">1</span>F</div>
+                <div class="k">점수</div><div class="v"><span id="gameover-score">0</span></div>
+                <div class="k">코인</div><div class="v"><span id="gameover-coins">0</span></div>
+                <div class="k">생존 시간</div><div class="v"><span id="gameover-time">0:00</span></div>
+                <div class="k">잡힘</div><div class="v"><span id="gameover-caught">0</span></div>
+                <div class="k">보스 처치</div><div class="v"><span id="gameover-boss-kills">0</span></div>
+            </div>
+
+            <div class="gameover-actions">
+                <button id="gameover-restart" class="btn btn-primary">다시 시작</button>
+            </div>
+            <div class="gameover-hint">Enter / R 로도 다시 시작할 수 있어요.</div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabaseClient.js"></script>
+    <script src="ui_auth.js"></script>
+    <script src="ui_leaderboard.js"></script>
+    <script src="ui_gameover.js"></script>
+    <script src="audio.js"></script>
+    <script src="ui_settings.js"></script>
+    <script src="ui_ability.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
