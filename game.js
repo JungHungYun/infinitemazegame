@@ -2329,6 +2329,65 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
     const chunkKey = getChunkKey(x, y);
     state.visitedChunks.add(chunkKey);
 
+    // 이전 청크가 이미 방문한 청크인 경우, 현재 청크의 입구를 벽으로 막기
+    if (prevChunk && Number.isFinite(prevChunk.x) && Number.isFinite(prevChunk.y)) {
+        const prevChunkKey = getChunkKey(prevChunk.x, prevChunk.y);
+        if (state.visitedChunks.has(prevChunkKey)) {
+            const chunk = state.chunks.get(chunkKey);
+            if (chunk && chunk.maze) {
+                const size = CONFIG.MAZE_SIZE;
+                const mid = Math.floor(size / 2);
+                
+                // 입구 방향에 따라 입구 타일과 안쪽 타일을 벽으로 막기 (외곽 벽: 200)
+                if (entryDir === 'N') {
+                    // 북쪽에서 들어옴: y=0, x=mid를 벽으로 막기
+                    chunk.maze[0][mid] = 200;
+                    if (size > 1) {
+                        // 안쪽 타일도 막기 (기본 벽 레벨 사용)
+                        const floor = y + 1;
+                        const dist = getWallLevelDistribution(floor);
+                        const rng = mulberry32(hashStringToUint(`mazeProb:${x},${y}`));
+                        const level = rng() < dist.nextProb ? dist.nextLevel : dist.baseLevel;
+                        chunk.maze[1][mid] = level + 1;
+                    }
+                } else if (entryDir === 'S') {
+                    // 남쪽에서 들어옴: y=size-1, x=mid를 벽으로 막기
+                    chunk.maze[size - 1][mid] = 200;
+                    if (size > 1) {
+                        const floor = y + 1;
+                        const dist = getWallLevelDistribution(floor);
+                        const rng = mulberry32(hashStringToUint(`mazeProb:${x},${y}`));
+                        const level = rng() < dist.nextProb ? dist.nextLevel : dist.baseLevel;
+                        chunk.maze[size - 2][mid] = level + 1;
+                    }
+                } else if (entryDir === 'W') {
+                    // 서쪽에서 들어옴: x=0, y=mid를 벽으로 막기
+                    chunk.maze[mid][0] = 200;
+                    if (size > 1) {
+                        const floor = y + 1;
+                        const dist = getWallLevelDistribution(floor);
+                        const rng = mulberry32(hashStringToUint(`mazeProb:${x},${y}`));
+                        const level = rng() < dist.nextProb ? dist.nextLevel : dist.baseLevel;
+                        chunk.maze[mid][1] = level + 1;
+                    }
+                } else if (entryDir === 'E') {
+                    // 동쪽에서 들어옴: x=size-1, y=mid를 벽으로 막기
+                    chunk.maze[mid][size - 1] = 200;
+                    if (size > 1) {
+                        const floor = y + 1;
+                        const dist = getWallLevelDistribution(floor);
+                        const rng = mulberry32(hashStringToUint(`mazeProb:${x},${y}`));
+                        const level = rng() < dist.nextProb ? dist.nextLevel : dist.baseLevel;
+                        chunk.maze[mid][size - 2] = level + 1;
+                    }
+                }
+                
+                // 텍스처를 다시 생성해야 하므로 캐시 무효화
+                chunk.mazeTex = null;
+            }
+        }
+    }
+
     // 최고 층 기록
     state.ui.maxFloorReached = Math.max(1, Math.floor(state.ui.maxFloorReached ?? 1), y + 1);
 
