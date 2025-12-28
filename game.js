@@ -191,7 +191,7 @@ const state = {
         hp: CONFIG.MISSILE_DAMAGE * 5,
         maxHp: CONFIG.MISSILE_DAMAGE * 5,
         // 경로 기반 시뮬레이션: 플레이어 경로를 따라가는 인덱스
-        pathIndex: 0, // state.player.pathHistory의 인덱스
+        pathHistoryIndex: 0, // state.player.pathHistory의 인덱스
     },
     chaserProjectiles: [], // {pos, vel}
 
@@ -2442,6 +2442,8 @@ function initChaserFirstTimeRandomInThisChunk() {
     state.chaser.pathIndex = 0;
     state.chaser.lastRepathMs = 0;
     state.chaser.lastTargetTile = null;
+    // 경로 기반 시뮬레이션 초기화 (최초 스폰이므로 경로 없음)
+    state.chaser.pathHistoryIndex = 0;
 
     // "3번째 행에서 랜덤 지점 스폰"도 동일하게 1초 후 등장 연출 적용
     state.chaser.entryScheduledDir = 'RANDOM';
@@ -2583,6 +2585,8 @@ function materializeChaserIntoPlayerChunk(entryDir) {
     // 추적자 체력 복구 (부활 시)
     state.chaser.hp = CONFIG.MISSILE_DAMAGE * 5;
     state.chaser.maxHp = CONFIG.MISSILE_DAMAGE * 5;
+    // 경로 기반 시뮬레이션 리셋 (플레이어와 같은 청크에 있으므로)
+    state.chaser.pathHistoryIndex = 0;
 
     // 최초 스폰(RANDOM)은 예약된 좌표 사용
     if (entryDir === 'RANDOM' && state.chaser.entryScheduledPos) {
@@ -3450,6 +3454,8 @@ function updateChaser(dt) {
             state.chaser.pathIndex = 0;
             state.chaser.lastRepathMs = 0;
             state.chaser.lastTargetTile = null;
+            // 경로 기반 시뮬레이션 리셋 (플레이어와 같은 청크에 도달했으므로)
+            state.chaser.pathHistoryIndex = 0;
         }
         return;
     }
@@ -3476,7 +3482,17 @@ function updateChaser(dt) {
         state.chaser.chunk.y = currentPath.chunk.y;
         const entryPos = getSpawnPosForEntry(currentPath.entryDir);
         state.chaser.pos = { ...entryPos };
-        state.chaser.isPresentInMaze = true; // 시뮬레이션 중이므로 항상 표시
+        // 경로 기반 시뮬레이션 중이므로 항상 표시 (입구 진입 연출 없이 바로 이동)
+        // 단, 플레이어와 같은 청크가 아닐 때만 (같은 청크면 입구 진입 연출 필요)
+        if (state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y) {
+            state.chaser.isPresentInMaze = true; // 다른 청크면 바로 표시
+        } else {
+            // 플레이어와 같은 청크면 입구 진입 연출 사용
+            state.chaser.isPresentInMaze = false;
+            state.chaser.entryScheduledDir = currentPath.entryDir;
+            state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
+            state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
+        }
         state.chaser.path = [];
         state.chaser.pathIndex = 0;
         state.chaser.lastRepathMs = 0;
@@ -3554,13 +3570,24 @@ function updateChaser(dt) {
             state.chaser.chunk.y = nextPath.chunk.y;
             const entryPos = getSpawnPosForEntry(nextPath.entryDir);
             state.chaser.pos = { ...entryPos };
-            state.chaser.isPresentInMaze = true; // 시뮬레이션 중이므로 항상 표시
+            // 다음 청크로 이동: 플레이어와 같은 청크가 아니면 바로 표시, 같으면 입구 진입 연출
+            if (state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y) {
+                state.chaser.isPresentInMaze = true; // 다른 청크면 바로 표시
+            } else {
+                // 플레이어와 같은 청크면 입구 진입 연출 사용
+                state.chaser.isPresentInMaze = false;
+                state.chaser.entryScheduledDir = nextPath.entryDir;
+                state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
+                state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
+            }
             state.chaser.path = [];
             state.chaser.pathIndex = 0;
             state.chaser.lastRepathMs = 0;
             state.chaser.lastTargetTile = null;
         } else {
             // 경로가 끝났으면 플레이어와 같은 청크에 도달한 것
+            // 경로 기반 시뮬레이션 리셋
+            state.chaser.pathHistoryIndex = 0;
             // 다음 프레임에서 플레이어 청크로 이동 처리됨
         }
     }
