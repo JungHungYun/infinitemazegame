@@ -3293,46 +3293,73 @@ function updateChaser(dt) {
     if (state.boss.active) return;
     // 보스전 직후엔 일정 시간 추격자/미사일 등장 금지
     if (state.chaser.bossCooldownUntilMs && state.nowMs < state.chaser.bossCooldownUntilMs) return;
-    // 추격자는 자신의 청크에 있음 (플레이어와 다른 청크에 있을 수 있음)
-    const chaserChunkKey = getChunkKey(state.chaser.chunk.x, state.chaser.chunk.y);
-    const chunk = state.chunks.get(chaserChunkKey);
-    if (!chunk) return; // 추격자 청크가 없으면 업데이트 불가
-    const maze = chunk.maze;
-
     // 살상 미사일에 의해 파괴된 경우 처리
     if (state.chaser.deadUntilNextChunk) return;
 
-    // 청크 진입 연출: 아직 등장 시간이 아니면 아예 미존재 처리
-    // 단, 추적자가 다른 청크에 있고 플레이어와 다른 청크에 있을 때는 계속 이동해야 하므로
-    // 출구 도달 체크는 항상 수행
-    const isChaserWaitingToAppear = !state.chaser.isPresentInMaze;
-    const isChaserInDifferentChunk = state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y;
+    // 플레이어와 같은 청크에 있는지 확인
+    const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.chaser.chunk.y === state.currentChunk.y;
     
-    if (isChaserWaitingToAppear) {
-        // 추적자가 다른 청크에 있으면 출구 도달 체크를 위해 계속 진행
-        // (플레이어와 같은 청크에 있을 때만 등장 대기)
-        if (!isChaserInDifferentChunk) {
-            if (state.chaser.entryScheduledUntilMs && state.nowMs >= state.chaser.entryScheduledUntilMs) {
-                const dir = state.chaser.entryScheduledDir || state.currentEntryDir || 'S';
-                
-                // 리스폰 타이머(3초 점멸 예고) 체크
-                if (state.chaser.respawnTimerMs > 0) {
-                    state.chaser.respawnTimerMs -= dt;
-                    if (state.chaser.respawnTimerMs <= 0) {
-                        materializeChaserIntoPlayerChunk(dir);
-                        updateUI();
-                    }
-                    return;
-                } else {
+    // 청크 진입 연출: 플레이어와 같은 청크에 있을 때만 입구 진입 연출 처리
+    if (!state.chaser.isPresentInMaze && isPlayerInChaserChunk) {
+        if (state.chaser.entryScheduledUntilMs && state.nowMs >= state.chaser.entryScheduledUntilMs) {
+            const dir = state.chaser.entryScheduledDir || state.currentEntryDir || 'S';
+            
+            // 리스폰 타이머(3초 점멸 예고) 체크
+            if (state.chaser.respawnTimerMs > 0) {
+                state.chaser.respawnTimerMs -= dt;
+                if (state.chaser.respawnTimerMs <= 0) {
                     materializeChaserIntoPlayerChunk(dir);
                     updateUI();
                 }
-            } else {
                 return;
+            } else {
+                materializeChaserIntoPlayerChunk(dir);
+                updateUI();
+            }
+        } else {
+            return;
+        }
+    }
+    
+    // 추격자는 자신의 청크에 있음 (플레이어와 다른 청크에 있을 수 있음)
+    // 경로 기반 시뮬레이션을 위해 청크 정보 가져오기
+    const chaserChunkKey = getChunkKey(state.chaser.chunk.x, state.chaser.chunk.y);
+    let chunk = state.chunks.get(chaserChunkKey);
+    
+    // 경로 기반 시뮬레이션: 추적자가 경로 청크에 있을 수 있으므로 해당 청크를 가져옴
+    const pathHistory = state.player.pathHistory || [];
+    const pathIndex = state.chaser.pathHistoryIndex || 0;
+    let simulatedChunk = null;
+    
+    if (!isPlayerInChaserChunk && pathIndex < pathHistory.length) {
+        // 경로 기반 시뮬레이션: 경로 청크 정보 가져오기
+        const currentPath = pathHistory[pathIndex];
+        if (currentPath) {
+            const simulatedChunkKey = getChunkKey(currentPath.chunk.x, currentPath.chunk.y);
+            simulatedChunk = state.chunks.get(simulatedChunkKey);
+            if (!simulatedChunk) {
+                // 청크가 없으면 생성 (가상 시뮬레이션을 위해)
+                simulatedChunk = new Chunk(currentPath.chunk.x, currentPath.chunk.y);
+                state.chunks.set(simulatedChunkKey, simulatedChunk);
+            }
+            // 추적자가 경로 청크에 있으면 해당 청크 사용
+            if (state.chaser.chunk.x === currentPath.chunk.x && state.chaser.chunk.y === currentPath.chunk.y) {
+                chunk = simulatedChunk;
             }
         }
-        // 추적자가 다른 청크에 있으면 isPresentInMaze가 false여도 계속 진행 (출구 도달 체크를 위해)
     }
+    
+    if (!chunk) {
+        // 추격자 청크가 없으면 업데이트 불가
+        // 경로 기반 시뮬레이션을 위해 청크 생성 시도
+        if (simulatedChunk) {
+            chunk = simulatedChunk;
+        } else {
+            return;
+        }
+    }
+    
+    const maze = chunk.maze;
 
     // 플레이어와 같은 청크에 있을 때만 미사일 발사 및 충돌 체크
     const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.currentChunk.y === state.chaser.chunk.y;
@@ -3447,9 +3474,6 @@ function updateChaser(dt) {
     }
     
     // 플레이어와 다른 청크에 있으면 경로 기반 시뮬레이션
-    const pathHistory = state.player.pathHistory || [];
-    const pathIndex = state.chaser.pathHistoryIndex || 0;
-    
     // 경로가 없거나 끝났으면 플레이어와 같은 청크에 도달한 것
     if (pathIndex >= pathHistory.length) {
         // 추적자가 플레이어 청크에 있지 않으면 이동
@@ -3477,15 +3501,6 @@ function updateChaser(dt) {
     const currentPath = pathHistory[pathIndex];
     if (!currentPath) return;
     
-    // 현재 경로의 청크 정보
-    const simulatedChunkKey = getChunkKey(currentPath.chunk.x, currentPath.chunk.y);
-    let simulatedChunk = state.chunks.get(simulatedChunkKey);
-    if (!simulatedChunk) {
-        // 청크가 없으면 생성 (가상 시뮬레이션을 위해)
-        simulatedChunk = new Chunk(currentPath.chunk.x, currentPath.chunk.y);
-        state.chunks.set(simulatedChunkKey, simulatedChunk);
-    }
-    
     // 추적자가 현재 경로의 청크에 있는지 확인
     const isChaserInPathChunk = state.chaser.chunk.x === currentPath.chunk.x && state.chaser.chunk.y === currentPath.chunk.y;
     
@@ -3510,6 +3525,23 @@ function updateChaser(dt) {
         state.chaser.pathIndex = 0;
         state.chaser.lastRepathMs = 0;
         state.chaser.lastTargetTile = null;
+    } else {
+        // 추적자가 이미 경로 청크에 있으면 isPresentInMaze 확인 및 설정
+        // (경로 기반 시뮬레이션 중이므로 다른 청크면 항상 표시)
+        if (state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y) {
+            state.chaser.isPresentInMaze = true; // 다른 청크면 바로 표시
+        }
+    }
+    
+    // 시뮬레이션에 사용할 청크 (경로 청크)
+    if (!simulatedChunk) {
+        const simulatedChunkKey = getChunkKey(currentPath.chunk.x, currentPath.chunk.y);
+        simulatedChunk = state.chunks.get(simulatedChunkKey);
+        if (!simulatedChunk) {
+            // 청크가 없으면 생성 (가상 시뮬레이션을 위해)
+            simulatedChunk = new Chunk(currentPath.chunk.x, currentPath.chunk.y);
+            state.chunks.set(simulatedChunkKey, simulatedChunk);
+        }
     }
     
     // 현재 청크에서 출구로 이동 시뮬레이션
