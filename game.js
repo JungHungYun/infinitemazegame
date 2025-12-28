@@ -2066,13 +2066,13 @@ function resize() {
 
 function generateVisibleChunks() {
     const viewDist = 5;
-    // 아래(음수 y)로도 이동 가능하므로 제한 제거
-    const startY = state.player.worldPos.y - viewDist;
+    // 1층(y=0) 이전에는 방이 없어야 하므로 y >= 0으로 제한
+    const startY = Math.max(0, state.player.worldPos.y - viewDist);
     const endY = state.player.worldPos.y + viewDist;
 
     // 메모리 누수 방지: 보이지 않는 청크 제거
     const keepDist = viewDist + 2; // 보이는 거리보다 조금 더 유지
-    const keepStartY = state.player.worldPos.y - keepDist;
+    const keepStartY = Math.max(0, state.player.worldPos.y - keepDist);
     const keepEndY = state.player.worldPos.y + keepDist;
     
     // 오래된 청크 제거 (메모리 누수 방지)
@@ -4245,8 +4245,12 @@ function checkExits() {
     // 중심 좌표 기준: 유효 영역은 (0~size)이며 타일 중심은 0.5~size-0.5
     if (p.y < 0) exitMaze(0, 1); // North (Y 증가가 북쪽)
     else if (p.y > CONFIG.MAZE_SIZE) {
-        // 남쪽(아래)로 이동 가능
-        exitMaze(0, -1); // South (Y 감소가 남쪽)
+        // 1층(y=0) 이전에는 방이 없으므로, y=0 청크에서는 남쪽으로 나갈 수 없음
+        if (state.currentChunk.y === 0) {
+            state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
+        } else {
+            exitMaze(0, -1); // South (Y 감소가 남쪽)
+        }
     }
     else if (p.x < 0) {
         // 맨 왼쪽 청크는 서쪽 막힘
@@ -4279,12 +4283,13 @@ function exitMaze(dx, dy) {
     // 안전장치: 좌/우 끝 청크는 바깥으로 이동 금지
     if (dx === -1 && state.currentChunk.x === 0) return;
     if (dx === 1 && state.currentChunk.x === CONFIG.CHUNK_COLS - 1) return;
-    // 아래(남쪽)로 이동 가능하므로 제한 제거
+    // 1층(y=0) 이전에는 방이 없으므로 y < 0으로 이동 금지
+    if (dy === -1 && state.currentChunk.y === 0) return;
 
     // 다음 청크 좌표 계산(정수)
     const prevWorldY = Math.round(state.player.worldPos.y);
     const nextX = Math.max(0, Math.min(CONFIG.CHUNK_COLS - 1, Math.round(state.player.worldPos.x) + dx));
-    const nextY = Math.round(state.player.worldPos.y) + dy; // 음수 y도 허용
+    const nextY = Math.max(0, Math.round(state.player.worldPos.y) + dy); // y < 0 금지 (1층 이전에는 방 없음)
 
     // 점수: 층수가 올라갈 때마다 +100 (층수 배수 적용)
     if (nextY > prevWorldY) {
