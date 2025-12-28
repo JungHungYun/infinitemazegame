@@ -1030,7 +1030,7 @@ function buildChunkMazeTexture(chunk) {
                 g.fillRect(px, py, tile, tile);
                 g.globalAlpha = 1;
             } else {
-                g.globalAlpha = 0.30; // 어둡게 보정 더 강화
+                g.globalAlpha = 0.70; // 어둡게 보정 더 강화
                 g.fillStyle = 'rgba(0,0,0,1)';
                 g.fillRect(px, py, tile, tile);
                 g.globalAlpha = 1;
