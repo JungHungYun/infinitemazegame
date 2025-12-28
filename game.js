@@ -3186,6 +3186,8 @@ function updateChaser(dt) {
             pos: { x: state.chaser.pos.x, y: state.chaser.pos.y },
             vel: { x: (dx/dist)*speed, y: (dy/dist)*speed }
         });
+        // 추적자 미사일 발사 소리
+        playSfx('resource/chaser-missile-launch.mp3', { volume: 0.7, rate: 1.0 });
     }
 
     // 플레이어와 직접 충돌 체크
@@ -3580,11 +3582,85 @@ function updateCollectiblesAndProjectiles(dt) {
                 }
             }
 
-            // 히트
-            const hx = targetX - m.pos.x;
-            const hy = targetY - m.pos.y;
-            const hitR = (state.boss.active ? 1.5 : CONFIG.CHASER_RADIUS) + 0.18;
-            if (hx * hx + hy * hy <= hitR * hitR) {
+            // 히트 판정
+            let hit = false;
+            if (state.boss.active) {
+                const hx = targetX - m.pos.x;
+                const hy = targetY - m.pos.y;
+                const hitR = 1.5 + 0.18;
+                if (hx * hx + hy * hy <= hitR * hitR) {
+                    hit = true;
+                }
+            } else if (m.interceptTarget && m.interceptTarget.type === 'projectile') {
+                // 추적자 미사일 요격
+                const hx = targetX - m.pos.x;
+                const hy = targetY - m.pos.y;
+                const hitR = 0.1 + 0.18; // 추적자 미사일은 작음
+                if (hx * hx + hy * hy <= hitR * hitR) {
+                    // 추적자 미사일 제거
+                    const projIdx = state.chaserProjectiles.indexOf(m.interceptTarget.proj);
+                    if (projIdx >= 0) {
+                        state.chaserProjectiles.splice(projIdx, 1);
+                    }
+                    // 3x3 범위 벽 파괴
+                    const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
+                    if (chunk && chunk.maze) {
+                        const centerX = Math.floor(targetX);
+                        const centerY = Math.floor(targetY);
+                        const maze = chunk.maze;
+                        const size = CONFIG.MAZE_SIZE;
+                        
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                const tx = centerX + dx;
+                                const ty = centerY + dy;
+                                if (tx >= 0 && tx < size && ty >= 0 && ty < size) {
+                                    const wallVal = maze[ty][tx];
+                                    if (wallVal > 0 && isBreakableWallTile(tx, ty)) {
+                                        maze[ty][tx] = 0;
+                                        chunk.mazeTex = null;
+                                        addScore(10, getFloor());
+                                        
+                                        // 파괴 이펙트
+                                        fxBurstMaze(tx + 0.5, ty + 0.5, {
+                                            kind: 'spark',
+                                            count: 12,
+                                            color: 'rgba(200, 245, 255, 0.95)',
+                                            lifeMs: 200,
+                                            speed: 8.0,
+                                            size: 0.02,
+                                            glow: 20
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // 요격 이펙트
+                    fxBurstMaze(targetX, targetY, {
+                        kind: 'spark',
+                        count: 30,
+                        color: 'rgba(255, 200, 100, 0.95)',
+                        lifeMs: 300,
+                        speed: 10.0,
+                        size: 0.04,
+                        glow: 30
+                    });
+                    playSfx('resource/missile-explosion-168600.mp3', { volume: 0.75, rate: 1.0 });
+                    state.missiles.splice(i, 1);
+                    continue;
+                }
+            } else {
+                // 추적자 또는 기본 타겟
+                const hx = targetX - m.pos.x;
+                const hy = targetY - m.pos.y;
+                const hitR = CONFIG.CHASER_RADIUS + 0.18;
+                if (hx * hx + hy * hy <= hitR * hitR) {
+                    hit = true;
+                }
+            }
+            
+            if (hit) {
                 state.missiles.splice(i, 1);
                 onMissileHitTarget(m);
                 continue;
