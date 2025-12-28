@@ -73,6 +73,21 @@ async function preloadGameImages() {
             // 코인 이미지 로드 실패는 무시 (폴백 렌더링 사용)
         });
         
+        // 타일 이미지들은 선택적 로드 (파일이 없어도 게임 진행 가능)
+        Promise.all([
+            loadImageWithDebug(GROUND_IMGS[0], 'resource/imgage/ground1.png', '바닥 타일 1').catch(() => {}),
+            loadImageWithDebug(GROUND_IMGS[1], 'resource/imgage/ground2.png', '바닥 타일 2').catch(() => {}),
+            loadImageWithDebug(GROUND_IMGS[2], 'resource/imgage/ground3.png', '바닥 타일 3').catch(() => {}),
+            loadImageWithDebug(GROUND_IMGS[3], 'resource/imgage/ground4.png', '바닥 타일 4').catch(() => {}),
+            loadImageWithDebug(GROUND_IMGS[4], 'resource/imgage/ground5.png', '바닥 타일 5').catch(() => {}),
+            loadImageWithDebug(WALL_IMG, 'resource/imgage/wall.png', '벽 타일').catch(() => {}),
+            loadImageWithDebug(WALL_BROKE_IMGS[0], 'resource/imgage/wall_broke1.png', '부서진 벽 1').catch(() => {}),
+            loadImageWithDebug(WALL_BROKE_IMGS[1], 'resource/imgage/wall_broke2.png', '부서진 벽 2').catch(() => {}),
+            loadImageWithDebug(WALL_BROKE_IMGS[2], 'resource/imgage/wall_broke3.png', '부서진 벽 3').catch(() => {}),
+        ]).catch(() => {
+            // 타일 이미지 로드 실패는 무시 (폴백 렌더링 사용)
+        });
+        
         GAME_IMG_READY = true;
         GAME_IMG_ERROR = '';
         return true;
@@ -938,26 +953,64 @@ function buildChunkMazeTexture(chunk) {
             const px = pad + x * tile;
             const py = pad + y * tile;
 
-            let v;
-            if (isWall) {
-                // 화약 여부 판정 (Stable RNG + "한 번 부쉈으면 일반 벽" 규칙 반영)
-                const hasGunpowder = hasGunpowderMarkOnWall(chunk, x, y, wallValue);
-
-                if (wallValue === 100) {
-                    v = goldWallVariants[(x * 31 + y * 17) % goldWallVariants.length];
-                } else if (wallValue === 200) {
-                    v = blackWallVariants[(x * 31 + y * 17) % blackWallVariants.length];
-                } else if (hasGunpowder) {
-                    v = gunpowderWallVariants[(x * 31 + y * 17) % gunpowderWallVariants.length];
+            // 타일 이미지 사용 (로드되었으면)
+            const useTileImages = WALL_IMG.complete && WALL_IMG.naturalWidth > 0 && GROUND_IMGS[0].complete && GROUND_IMGS[0].naturalWidth > 0;
+            
+            if (useTileImages) {
+                if (isWall) {
+                    // 벽 이미지 사용 (특수 벽은 기존 방식 유지)
+                    const hasGunpowder = hasGunpowderMarkOnWall(chunk, x, y, wallValue);
+                    if (wallValue === 100) {
+                        // 사금벽은 기존 방식
+                        v = goldWallVariants[(x * 31 + y * 17) % goldWallVariants.length];
+                        g.drawImage(v, px, py, tile, tile);
+                    } else if (wallValue === 200) {
+                        // 검정 벽은 기존 방식
+                        v = blackWallVariants[(x * 31 + y * 17) % blackWallVariants.length];
+                        g.drawImage(v, px, py, tile, tile);
+                    } else if (hasGunpowder) {
+                        // 화약벽은 기존 방식
+                        v = gunpowderWallVariants[(x * 31 + y * 17) % gunpowderWallVariants.length];
+                        g.drawImage(v, px, py, tile, tile);
+                    } else {
+                        // 일반 벽은 이미지 사용
+                        g.drawImage(WALL_IMG, px, py, tile, tile);
+                    }
                 } else {
-                    const lv = wallValue - 1;
-                    const variants = wallVariantsByLevel[lv];
-                    v = variants[(x * 31 + y * 17) % variants.length];
+                    // 바닥 이미지 랜덤 선택
+                    const groundIdx = (x * 31 + y * 17) % GROUND_IMGS.length;
+                    const groundImg = GROUND_IMGS[groundIdx];
+                    if (groundImg.complete && groundImg.naturalWidth > 0) {
+                        g.drawImage(groundImg, px, py, tile, tile);
+                    } else {
+                        // 이미지가 로드되지 않았으면 폴백
+                        v = floorVariants[(x * 31 + y * 17) % floorVariants.length];
+                        g.drawImage(v, px, py, tile, tile);
+                    }
                 }
             } else {
-                v = floorVariants[(x * 31 + y * 17) % floorVariants.length];
+                // 기존 방식 (이미지가 없을 때)
+                let v;
+                if (isWall) {
+                    // 화약 여부 판정 (Stable RNG + "한 번 부쉈으면 일반 벽" 규칙 반영)
+                    const hasGunpowder = hasGunpowderMarkOnWall(chunk, x, y, wallValue);
+
+                    if (wallValue === 100) {
+                        v = goldWallVariants[(x * 31 + y * 17) % goldWallVariants.length];
+                    } else if (wallValue === 200) {
+                        v = blackWallVariants[(x * 31 + y * 17) % blackWallVariants.length];
+                    } else if (hasGunpowder) {
+                        v = gunpowderWallVariants[(x * 31 + y * 17) % gunpowderWallVariants.length];
+                    } else {
+                        const lv = wallValue - 1;
+                        const variants = wallVariantsByLevel[lv];
+                        v = variants[(x * 31 + y * 17) % variants.length];
+                    }
+                } else {
+                    v = floorVariants[(x * 31 + y * 17) % floorVariants.length];
+                }
+                g.drawImage(v, px, py, tile, tile);
             }
-            g.drawImage(v, px, py, tile, tile);
 
             // 바닥은 약간 밝게, 벽은 약간 더 어둡게 추가 보정(명도차 강화)
             if (!isWall) {
