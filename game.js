@@ -4667,9 +4667,12 @@ function drawMiniMap(x, y, w, h) {
             const k = getChunkKey(wx, wy);
             const ch = state.chunks.get(k);
             const isBoss = ((wy + 1) % 20 === 0);
+            const isVisited = state.visitedChunks.has(k);
+            const isCurrent = (wx === cx && wy === cy);
 
             let fill = 'rgba(40,40,40,0.7)';
             if (!ch) fill = 'rgba(0,0,0,0.55)';
+            else if (isVisited && !isCurrent) fill = 'rgba(20,20,20,0.85)'; // 방문한 청크는 매우 어둡게
             else if (ch.cleared) fill = 'rgba(26,75,26,0.75)';
             else fill = isBoss ? 'rgba(120,30,30,0.70)' : 'rgba(60,60,65,0.75)';
 
@@ -4678,6 +4681,18 @@ function drawMiniMap(x, y, w, h) {
             ctx.fillStyle = fill;
             ctx.fillRect(px + 1, py + 1, cellW - 2, cellH - 2);
 
+            // 방문한 청크에 X 표시
+            if (isVisited && !isCurrent && ch) {
+                ctx.strokeStyle = 'rgba(100, 0, 0, 0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(px + 2, py + 2);
+                ctx.lineTo(px + cellW - 2, py + cellH - 2);
+                ctx.moveTo(px + cellW - 2, py + 2);
+                ctx.lineTo(px + 2, py + cellH - 2);
+                ctx.stroke();
+            }
+            
             // 방문한 청크에 X 표시
             if (isVisited && !isCurrent && ch) {
                 ctx.strokeStyle = 'rgba(100, 0, 0, 0.6)';
@@ -4744,11 +4759,32 @@ function drawWorld(cameraY = state.cameraY, opts = {}) {
         if (screenY + CONFIG.CHUNK_SIZE < -100 || screenY > viewH + 100) return;
 
         // 청크 상자
-        ctx.fillStyle = chunk.cleared ? '#1a331a' : '#1a1a1a';
+        const chunkKey = getChunkKey(chunk.x, chunk.y);
+        const isVisited = state.visitedChunks.has(chunkKey);
+        const isCurrent = (state.currentChunk.x === chunk.x && state.currentChunk.y === chunk.y);
+        
+        // 방문한 청크는 어둡게 표시
+        if (isVisited && !isCurrent) {
+            ctx.fillStyle = '#0a0a0a'; // 매우 어두운 색
+        } else {
+            ctx.fillStyle = chunk.cleared ? '#1a331a' : '#1a1a1a';
+        }
         ctx.fillRect(screenX + 5, screenY + 5, CONFIG.CHUNK_SIZE - 10, CONFIG.CHUNK_SIZE - 10);
         
-        ctx.strokeStyle = (state.currentChunk.x === chunk.x && state.currentChunk.y === chunk.y) ? '#00ffff' : '#444';
-        ctx.lineWidth = (state.currentChunk.x === chunk.x && state.currentChunk.y === chunk.y) ? 3 : 1;
+        // 방문한 청크는 X 표시 추가
+        if (isVisited && !isCurrent) {
+            ctx.strokeStyle = 'rgba(100, 0, 0, 0.8)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(screenX + 10, screenY + 10);
+            ctx.lineTo(screenX + CONFIG.CHUNK_SIZE - 15, screenY + CONFIG.CHUNK_SIZE - 15);
+            ctx.moveTo(screenX + CONFIG.CHUNK_SIZE - 15, screenY + 10);
+            ctx.lineTo(screenX + 10, screenY + CONFIG.CHUNK_SIZE - 15);
+            ctx.stroke();
+        }
+        
+        ctx.strokeStyle = isCurrent ? '#00ffff' : (isVisited ? '#333' : '#444');
+        ctx.lineWidth = isCurrent ? 3 : 1;
         ctx.strokeRect(screenX + 5, screenY + 5, CONFIG.CHUNK_SIZE - 10, CONFIG.CHUNK_SIZE - 10);
         
         // (삭제) 청크 좌표 텍스트
