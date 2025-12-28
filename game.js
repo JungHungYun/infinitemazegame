@@ -2367,9 +2367,23 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
         if (!state.chaser.active) {
             initChaserFirstTimeRandomInThisChunk();
         } else {
-            // 이미 활성화된 상태라면, 부활 예약('RANDOM')이 아닌 경우에만 입구 진입 예약
-            if (state.chaser.entryScheduledDir !== 'RANDOM') {
-                scheduleChaserEntryIntoPlayerChunk(entryDir);
+            // 추격자가 플레이어와 같은 청크에 있는지 확인
+            const isChaserInPlayerChunk = state.chaser.chunk.x === x && state.chaser.chunk.y === y;
+            if (isChaserInPlayerChunk) {
+                // 추격자가 이미 이 청크에 있고 이동 중이면 입구 진입 예약하지 않음
+                // (플레이어가 다시 돌아왔을 때 추격자가 경과한 시간만큼 이동한 상태로 유지)
+                if (state.chaser.isPresentInMaze) {
+                    // 추격자가 이미 청크에 있으므로 입구 진입 예약하지 않음
+                    // 추격자는 계속 이동 중인 상태로 유지됨
+                } else {
+                    // 추격자가 이 청크에 있지만 아직 등장하지 않았으면 입구 진입 예약
+                    // 부활 예약('RANDOM')이 아닌 경우에만 입구 진입 예약
+                    if (state.chaser.entryScheduledDir !== 'RANDOM') {
+                        scheduleChaserEntryIntoPlayerChunk(entryDir);
+                    }
+                }
+            } else {
+                // 추격자가 다른 청크에 있으면 입구 진입 예약하지 않음 (이전 청크에서 계속 활동)
             }
         }
     }
