@@ -5497,8 +5497,12 @@ function drawMaze() {
         }
     }
 
-    // 추격자 투사체 렌더
+    // 추격자 투사체 렌더 (플레이어와 같은 청크에 있는 미사일만)
     for (const p of state.chaserProjectiles) {
+        const projChunk = p.chunk || state.chaser.chunk;
+        // 플레이어와 같은 청크에 있는 미사일만 렌더링
+        if (projChunk.x !== state.currentChunk.x || projChunk.y !== state.currentChunk.y) continue;
+        
         const px = offsetX + p.pos.x * cellSize;
         const py = offsetY + p.pos.y * cellSize;
         const vx = p.vel?.x ?? 0;
