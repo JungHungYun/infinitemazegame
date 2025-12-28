@@ -5083,10 +5083,37 @@ function drawMaze() {
         }
     }
 
-    // 출구 바닥 타일 오버레이 (이미 방문한 청크: 빨간색, 10층 진입: 파란색)
+    // 출구/입구 바닥 타일 오버레이 (이미 방문한 청크: 빨간색, 10층 진입: 파란색)
     ctx.save();
     const currentFloor = state.currentChunk.y + 1;
     const overlayAlpha = 0.4; // 투명도
+    
+    // 현재 청크의 입구 표시 (들어온 방향) - 항상 빨간색으로 표시
+    if (state.currentEntryDir) {
+        let tileX, tileY;
+        const midX = Math.floor(CONFIG.MAZE_SIZE / 2);
+        const midY = Math.floor(CONFIG.MAZE_SIZE / 2);
+        
+        // 입구 위치에 빨간색 표시
+        if (state.currentEntryDir === 'N') {
+            tileX = offsetX + midX * cellSize;
+            tileY = offsetY + 0 * cellSize;
+        } else if (state.currentEntryDir === 'S') {
+            tileX = offsetX + midX * cellSize;
+            tileY = offsetY + (CONFIG.MAZE_SIZE - 1) * cellSize;
+        } else if (state.currentEntryDir === 'W') {
+            tileX = offsetX + 0 * cellSize;
+            tileY = offsetY + midY * cellSize;
+        } else if (state.currentEntryDir === 'E') {
+            tileX = offsetX + (CONFIG.MAZE_SIZE - 1) * cellSize;
+            tileY = offsetY + midY * cellSize;
+        }
+        
+        if (tileX !== undefined && tileY !== undefined) {
+            ctx.fillStyle = `rgba(255, 68, 68, ${overlayAlpha})`;
+            ctx.fillRect(tileX, tileY, cellSize, cellSize);
+        }
+    }
     
     // 북쪽 출구 바닥 타일 (y=0, x=중앙)
     {
