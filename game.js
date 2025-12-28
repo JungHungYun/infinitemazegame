@@ -3409,12 +3409,68 @@ function updateChaser(dt) {
         if (step === dist) state.chaser.pathIndex += 1;
     }
 
-    // 잡힘 판정
-    const rx = state.chaser.pos.x - state.player.mazePos.x;
-    const ry = state.chaser.pos.y - state.player.mazePos.y;
-    const hitR = CONFIG.CHASER_RADIUS + CONFIG.PLAYER_RADIUS;
-    if (rx * rx + ry * ry <= hitR * hitR) {
-        resetAfterCaught();
+    // 잡힘 판정 (같은 청크에 있을 때만)
+    if (isPlayerInChaserChunkForPath) {
+        const rx = state.chaser.pos.x - state.player.mazePos.x;
+        const ry = state.chaser.pos.y - state.player.mazePos.y;
+        const hitR = CONFIG.CHASER_RADIUS + CONFIG.PLAYER_RADIUS;
+        if (rx * rx + ry * ry <= hitR * hitR) {
+            resetAfterCaught();
+        }
+    }
+    
+    // 추격자가 청크 경계(출구)에 도달하면 플레이어가 있는 청크의 입구로 스폰
+    const size = CONFIG.MAZE_SIZE;
+    const margin = 0.3; // 경계 근처 판정 마진
+    let exitDir = null;
+    
+    // 추격자가 청크 경계 근처에 있는지 확인
+    if (state.chaser.pos.x < margin) exitDir = 'W'; // 서쪽 출구
+    else if (state.chaser.pos.x > size - margin) exitDir = 'E'; // 동쪽 출구
+    else if (state.chaser.pos.y < margin) exitDir = 'S'; // 남쪽 출구
+    else if (state.chaser.pos.y > size - margin) exitDir = 'N'; // 북쪽 출구
+    
+    // 추격자가 출구에 도달했고, 플레이어와 다른 청크에 있으면 플레이어 청크로 이동
+    if (exitDir && !isPlayerInChaserChunkForPath) {
+        const dx = state.currentChunk.x - state.chaser.chunk.x;
+        const dy = state.currentChunk.y - state.chaser.chunk.y;
+        
+        // 출구 방향과 플레이어 방향이 일치하는지 확인
+        let shouldExit = false;
+        if (exitDir === 'W' && dx < 0) shouldExit = true; // 서쪽 출구, 플레이어는 서쪽에
+        else if (exitDir === 'E' && dx > 0) shouldExit = true; // 동쪽 출구, 플레이어는 동쪽에
+        else if (exitDir === 'S' && dy < 0) shouldExit = true; // 남쪽 출구, 플레이어는 남쪽에
+        else if (exitDir === 'N' && dy > 0) shouldExit = true; // 북쪽 출구, 플레이어는 북쪽에
+        
+        if (shouldExit) {
+            // 추격자가 플레이어 청크로 이동
+            state.chaser.chunk.x = state.currentChunk.x;
+            state.chaser.chunk.y = state.currentChunk.y;
+            
+            // 플레이어가 들어온 입구의 반대편에서 스폰
+            // 예: 플레이어가 북쪽으로 나갔으면 (dy=1), 추적자는 남쪽 입구에서 들어옴
+            let entryDir = 'S'; // 기본값
+            if (dx < 0) entryDir = 'E'; // 플레이어가 서쪽으로 나감 -> 추적자는 동쪽에서 들어옴
+            else if (dx > 0) entryDir = 'W'; // 플레이어가 동쪽으로 나감 -> 추적자는 서쪽에서 들어옴
+            else if (dy < 0) entryDir = 'N'; // 플레이어가 남쪽으로 나감 -> 추적자는 북쪽에서 들어옴
+            else if (dy > 0) entryDir = 'S'; // 플레이어가 북쪽으로 나감 -> 추적자는 남쪽에서 들어옴
+            
+            // 입구 위치로 스폰
+            const entryPos = getSpawnPosForEntry(entryDir);
+            state.chaser.pos = { ...entryPos };
+            
+            // 입구 진입 연출을 위해 일정 시간 후 등장
+            state.chaser.isPresentInMaze = false;
+            state.chaser.entryScheduledDir = entryDir;
+            state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
+            state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
+            
+            // 경로 초기화
+            state.chaser.path = [];
+            state.chaser.pathIndex = 0;
+            state.chaser.lastRepathMs = 0;
+            state.chaser.lastTargetTile = null;
+        }
     }
 }
 
