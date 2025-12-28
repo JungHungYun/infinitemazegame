@@ -3330,13 +3330,35 @@ function updateChaser(dt) {
     
     const moveDist = speed * dtSec;
 
-    const playerTile = { x: Math.floor(state.player.mazePos.x), y: Math.floor(state.player.mazePos.y) };
+    // 플레이어가 추격자와 같은 청크에 있으면 플레이어 위치를 타겟으로, 아니면 추격자 청크의 중앙을 타겟으로
+    const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.currentChunk.y === state.chaser.chunk.y;
+    let targetTile;
+    if (isPlayerInChaserChunk) {
+        // 같은 청크에 있으면 플레이어를 추적
+        targetTile = { x: Math.floor(state.player.mazePos.x), y: Math.floor(state.player.mazePos.y) };
+    } else {
+        // 다른 청크에 있으면 플레이어가 있는 방향으로 이동 (청크 경계로 이동)
+        const dx = state.currentChunk.x - state.chaser.chunk.x;
+        const dy = state.currentChunk.y - state.chaser.chunk.y;
+        // 추격자 청크의 플레이어 방향 가장자리로 이동
+        const size = CONFIG.MAZE_SIZE;
+        if (Math.abs(dx) > Math.abs(dy)) {
+            // X 방향 차이가 더 큼
+            if (dx > 0) targetTile = { x: size - 1, y: Math.floor(size / 2) }; // 동쪽 가장자리
+            else targetTile = { x: 0, y: Math.floor(size / 2) }; // 서쪽 가장자리
+        } else {
+            // Y 방향 차이가 더 큼
+            if (dy > 0) targetTile = { x: Math.floor(size / 2), y: size - 1 }; // 북쪽 가장자리
+            else targetTile = { x: Math.floor(size / 2), y: 0 }; // 남쪽 가장자리
+        }
+    }
+    
     const chaserTile = { x: Math.floor(state.chaser.pos.x), y: Math.floor(state.chaser.pos.y) };
 
     const needRepath =
         !state.chaser.lastTargetTile ||
-        state.chaser.lastTargetTile.x !== playerTile.x ||
-        state.chaser.lastTargetTile.y !== playerTile.y ||
+        state.chaser.lastTargetTile.x !== targetTile.x ||
+        state.chaser.lastTargetTile.y !== targetTile.y ||
         (state.nowMs - state.chaser.lastRepathMs) > CONFIG.CHASER_REPATH_MS ||
         state.chaser.path.length === 0 ||
         state.chaser.pathIndex >= state.chaser.path.length;
