@@ -2244,8 +2244,9 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
     state.chaserProjectiles = [];
     state.missiles = [];
     state.pendingMissileShots = [];
-    // 보스 패턴(레이저)도 맵 전환 시 초기화
+    // 보스 패턴(레이저, 격자 장판)도 맵 전환 시 초기화
     state.boss.lasers = [];
+    state.boss.gridPatterns = [];
     // 보스 혈흔은 청크(맵) 이동 시 정리
     if (state.fx?.bloodSplats) state.fx.bloodSplats = [];
 
@@ -2820,6 +2821,7 @@ function updateBoss(dt) {
     const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
     if (!chunk || chunk.cleared) {
         state.boss.active = false;
+        state.boss.gridPatterns = [];
         return;
     }
 
