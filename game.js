@@ -3202,7 +3202,7 @@ function updateChaser(dt) {
             vel: { x: (dx/dist)*speed, y: (dy/dist)*speed }
         });
         // 추적자 미사일 발사 소리
-        playSfx('resource/chaser-missile-launch.mp3', { volume: 0.7, rate: 1.0 });
+        playSfx('resource/chaser_missile-44538.mp3', { volume: 0.7, rate: 1.0 });
     }
 
     // 플레이어와 직접 충돌 체크
