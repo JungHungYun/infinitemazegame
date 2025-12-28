@@ -956,9 +956,6 @@ function buildChunkMazeTexture(chunk) {
             // 타일 이미지 사용 (로드되었으면)
             const useTileImages = WALL_IMG.complete && WALL_IMG.naturalWidth > 0 && GROUND_IMGS[0].complete && GROUND_IMGS[0].naturalWidth > 0;
             
-            // 타일 이미지 사용 (로드되었으면)
-            const useTileImages = WALL_IMG.complete && WALL_IMG.naturalWidth > 0 && GROUND_IMGS[0].complete && GROUND_IMGS[0].naturalWidth > 0;
-            
             if (useTileImages) {
                 if (isWall) {
                     // 벽 이미지 사용 (특수 벽은 기존 방식 유지)
