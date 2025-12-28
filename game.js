@@ -3186,8 +3186,8 @@ function updateChaser(dt) {
             pos: { x: state.chaser.pos.x, y: state.chaser.pos.y },
             vel: { x: (dx/dist)*speed, y: (dy/dist)*speed }
         });
-        // 추적자 미사일 발사 소리
-        playSfx('resource/chaser-missile-launch.mp3', { volume: 0.7, rate: 1.0 });
+        // 추적자 미사일 발사 소리 (기존 미사일 발사 소리 사용)
+        playSfx('resource/missile-launch.mp3', { volume: 0.6, rate: 0.9 });
     }
 
     // 플레이어와 직접 충돌 체크
