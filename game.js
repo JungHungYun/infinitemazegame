@@ -4243,23 +4243,67 @@ function subScore(base, floor = getFloor()) {
 function checkExits() {
     const p = state.player.mazePos;
     // 중심 좌표 기준: 유효 영역은 (0~size)이며 타일 중심은 0.5~size-0.5
-    if (p.y < 0) exitMaze(0, 1); // North (Y 증가가 북쪽)
+    if (p.y < 0) {
+        // 북쪽으로 나가려고 함
+        const nextX = state.currentChunk.x;
+        const nextY = state.currentChunk.y + 1;
+        const key = getChunkKey(nextX, nextY);
+        // 이미 방문한 청크면 블로킹
+        if (state.visitedChunks.has(key)) {
+            state.player.mazePos.y = 0.5;
+        } else {
+            exitMaze(0, 1); // North (Y 증가가 북쪽)
+        }
+    }
     else if (p.y > CONFIG.MAZE_SIZE) {
+        // 남쪽으로 나가려고 함
         // 1층(y=0) 이전에는 방이 없으므로, y=0 청크에서는 남쪽으로 나갈 수 없음
         if (state.currentChunk.y === 0) {
             state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
         } else {
-            exitMaze(0, -1); // South (Y 감소가 남쪽)
+            const nextX = state.currentChunk.x;
+            const nextY = state.currentChunk.y - 1;
+            const key = getChunkKey(nextX, nextY);
+            // 이미 방문한 청크면 블로킹
+            if (state.visitedChunks.has(key)) {
+                state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
+            } else {
+                exitMaze(0, -1); // South (Y 감소가 남쪽)
+            }
         }
     }
     else if (p.x < 0) {
+        // 서쪽으로 나가려고 함
         // 맨 왼쪽 청크는 서쪽 막힘
-        if (state.currentChunk.x === 0) state.player.mazePos.x = 0.5;
-        else exitMaze(-1, 0);
+        if (state.currentChunk.x === 0) {
+            state.player.mazePos.x = 0.5;
+        } else {
+            const nextX = state.currentChunk.x - 1;
+            const nextY = state.currentChunk.y;
+            const key = getChunkKey(nextX, nextY);
+            // 이미 방문한 청크면 블로킹
+            if (state.visitedChunks.has(key)) {
+                state.player.mazePos.x = 0.5;
+            } else {
+                exitMaze(-1, 0);
+            }
+        }
     } else if (p.x > CONFIG.MAZE_SIZE) {
+        // 동쪽으로 나가려고 함
         // 맨 오른쪽 청크는 동쪽 막힘
-        if (state.currentChunk.x === CONFIG.CHUNK_COLS - 1) state.player.mazePos.x = CONFIG.MAZE_SIZE - 0.5;
-        else exitMaze(1, 0);
+        if (state.currentChunk.x === CONFIG.CHUNK_COLS - 1) {
+            state.player.mazePos.x = CONFIG.MAZE_SIZE - 0.5;
+        } else {
+            const nextX = state.currentChunk.x + 1;
+            const nextY = state.currentChunk.y;
+            const key = getChunkKey(nextX, nextY);
+            // 이미 방문한 청크면 블로킹
+            if (state.visitedChunks.has(key)) {
+                state.player.mazePos.x = CONFIG.MAZE_SIZE - 0.5;
+            } else {
+                exitMaze(1, 0);
+            }
+        }
     }
 }
 
@@ -4313,15 +4357,15 @@ function exitMaze(dx, dy) {
         state.chaser.speedMult = Math.min(CONFIG.CHASER_MAX_SPEED_MULT, state.chaser.speedMult + CONFIG.CHASER_SPEEDUP_PER_CHUNK);
     }
 
-    // 이미 방문한 청크로는 이동 불가
+    // 다음 청크가 없으면 생성 후 바로 그 청크의 미로로 자동 진입
     const key = getChunkKey(nextX, nextY);
+    if (!state.chunks.has(key)) state.chunks.set(key, new Chunk(nextX, nextY));
+    
+    // 이미 방문한 청크로는 이동 불가 (블로킹은 checkExits에서 처리)
     if (state.visitedChunks.has(key)) {
-        // 이미 방문한 청크로 이동하려고 하면 차단
+        // 이미 방문한 청크로 이동하려고 하면 차단 (블로킹은 checkExits에서 처리)
         return;
     }
-    
-    // 다음 청크가 없으면 생성 후 바로 그 청크의 미로로 자동 진입
-    if (!state.chunks.has(key)) state.chunks.set(key, new Chunk(nextX, nextY));
 
     // 10층마다 어빌리티 선택창(중복 방지) - 선택 후 다음 청크로 진입
     const floor = nextY + 1;
