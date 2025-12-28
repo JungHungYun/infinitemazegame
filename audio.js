@@ -27,10 +27,28 @@ function ensureWallRubAudioElement() {
 
 function ensureSfxContext() {
     const sfx = state.audio.sfx;
-    if (sfx.ctx) return sfx.ctx;
+    if (sfx.ctx) {
+        // 모바일: suspended 상태를 자주 체크하고 resume
+        if (sfx.ctx.state === 'suspended') {
+            const rp = sfx.ctx.resume();
+            if (rp && typeof rp.catch === 'function') rp.catch(() => {});
+        }
+        return sfx.ctx;
+    }
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return null;
-    sfx.ctx = new Ctx();
+    // 모바일 최적화: 샘플레이트를 명시적으로 설정 (일부 모바일 브라우저에서 문제 방지)
+    try {
+        sfx.ctx = new Ctx({ sampleRate: 44100 });
+    } catch {
+        // 샘플레이트 설정 실패 시 기본 생성자 사용
+        sfx.ctx = new Ctx();
+    }
+    // 모바일: 초기 상태가 suspended일 수 있으므로 resume 시도
+    if (sfx.ctx.state === 'suspended') {
+        const rp = sfx.ctx.resume();
+        if (rp && typeof rp.catch === 'function') rp.catch(() => {});
+    }
     return sfx.ctx;
 }
 
@@ -150,6 +168,51 @@ async function loadSfxBuffer(src) {
     }
 }
 
+// Audio 엘리먼트 풀에서 재사용 가능한 엘리먼트 가져오기
+function getPooledAudioElement() {
+    const sfx = state.audio.sfx;
+    const pool = sfx.audioPool || [];
+    
+    // 재생이 끝난 엘리먼트 찾기
+    for (let i = 0; i < pool.length; i++) {
+        const a = pool[i];
+        if (a && (a.paused || a.ended)) {
+            // 재사용 전 초기화
+            try {
+                a.pause();
+                a.currentTime = 0;
+            } catch {}
+            return a;
+        }
+    }
+    
+    // 풀이 가득 차지 않았으면 새로 생성
+    if (pool.length < (sfx.maxPoolSize || 8)) {
+        const a = new Audio();
+        a.preload = 'auto';
+        pool.push(a);
+        return a;
+    }
+    
+    // 풀이 가득 찼으면 가장 오래된 엘리먼트 재사용 (강제)
+    if (pool.length > 0) {
+        const a = pool[0];
+        try {
+            a.pause();
+            a.currentTime = 0;
+        } catch {}
+        // 순환: 사용한 엘리먼트를 맨 뒤로 이동
+        pool.push(pool.shift());
+        return a;
+    }
+    
+    // 풀이 비어있으면 새로 생성
+    const a = new Audio();
+    a.preload = 'auto';
+    pool.push(a);
+    return a;
+}
+
 function playSfx(src, opts = {}) {
     // SFX는 wallRub 언락과 별개로 "유저 제스처"만 있으면 재생 가능
     if (!state.audio.gestureUnlocked) return;
@@ -162,11 +225,25 @@ function playSfx(src, opts = {}) {
 
     const playViaPlainAudioElement = () => {
         // 폴백: WebAudio가 없거나(fetch/decode 실패 포함) 환경에서도 즉시 재생
+        // 모바일 최적화: Audio 엘리먼트 풀 사용
         try {
-            const a = new Audio(src);
+            const a = getPooledAudioElement();
+            a.src = src;
             a.volume = Math.max(0, Math.min(1, volume * (state.audio.sfx.master ?? 1)));
             a.playbackRate = Math.max(0.5, Math.min(2.0, rate));
-            a.play().catch(() => {});
+            // 모바일: play() 실패 시 재시도
+            const playPromise = a.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch((err) => {
+                    // 재생 실패 시 한 번 더 시도
+                    setTimeout(() => {
+                        try {
+                            a.currentTime = 0;
+                            a.play().catch(() => {});
+                        } catch {}
+                    }, 50);
+                });
+            }
         } catch { /* ignore */ }
     };
 
@@ -184,21 +261,35 @@ function playSfx(src, opts = {}) {
 
     // 캐시 히트면 WebAudio로 즉시 재생(지연 없음)
     try {
+        // 모바일: suspended 상태를 더 적극적으로 체크하고 resume
         if (ctx.state === 'suspended') {
             const rp = ctx.resume();
-            if (rp && typeof rp.catch === 'function') rp.catch(() => {});
+            if (rp && typeof rp.catch === 'function') {
+                rp.catch(() => {
+                    // resume 실패 시 폴백으로 재생
+                    playViaPlainAudioElement();
+                });
+                // resume이 완료될 때까지 기다리지 않고 바로 재생 시도 (비동기)
+            }
         }
-        const srcNode = ctx.createBufferSource();
-        srcNode.buffer = cached;
-        srcNode.playbackRate.value = Math.max(0.5, Math.min(2.0, rate));
+        
+        // resume 중이거나 suspended 상태일 수 있으므로, 재생 실패 시 폴백
+        try {
+            const srcNode = ctx.createBufferSource();
+            srcNode.buffer = cached;
+            srcNode.playbackRate.value = Math.max(0.5, Math.min(2.0, rate));
 
-        const gain = ctx.createGain();
-        const v = Math.max(0, Math.min(1, volume * (state.audio.sfx.master ?? 1)));
-        gain.gain.value = v;
+            const gain = ctx.createGain();
+            const v = Math.max(0, Math.min(1, volume * (state.audio.sfx.master ?? 1)));
+            gain.gain.value = v;
 
-        srcNode.connect(gain);
-        gain.connect(ctx.destination);
-        srcNode.start();
+            srcNode.connect(gain);
+            gain.connect(ctx.destination);
+            srcNode.start();
+        } catch (webAudioErr) {
+            // WebAudio 재생 실패 시 즉시 폴백
+            playViaPlainAudioElement();
+        }
     } catch {
         // WebAudio 재생이 실패하면 즉시 폴백
         playViaPlainAudioElement();
@@ -211,22 +302,34 @@ function unlockAudioOnce() {
     if (state.audio.unlocked) return;
     try {
         const el = ensureWallRubAudioElement();
-        ensureSfxContext();
+        const ctx = ensureSfxContext();
+        
+        // 모바일: AudioContext가 suspended 상태면 즉시 resume 시도
+        if (ctx && ctx.state === 'suspended') {
+            const rp = ctx.resume();
+            if (rp && typeof rp.catch === 'function') rp.catch(() => {});
+        }
+        
         // SFX는 첫 재생 지연을 없애기 위해 예열(완료 시 자동 재생 없음)
-        loadSfxBuffer('resource/missile-launch.mp3').catch(() => {});
-        loadSfxBuffer('resource/missile-explosion-168600.mp3').catch(() => {});
-        loadSfxBuffer('resource/small-rock-break-194553.mp3').catch(() => {});
-        loadSfxBuffer('resource/rock-break-hard-184891.mp3').catch(() => {});
-        loadSfxBuffer('resource/pick-coin-384921.mp3').catch(() => {});
-        loadSfxBuffer('resource/pick_missile-83043.mp3').catch(() => {});
+        // 모바일 최적화: 모든 사운드를 미리 로드
+        const sfxFiles = [
+            'resource/missile-launch.mp3',
+            'resource/missile-explosion-168600.mp3',
+            'resource/small-rock-break-194553.mp3',
+            'resource/rock-break-hard-184891.mp3',
+            'resource/pick-coin-384921.mp3',
+            'resource/pick_missile-83043.mp3'
+        ];
+        sfxFiles.forEach(src => {
+            loadSfxBuffer(src).catch(() => {});
+        });
+        
         // 상점 BGM 예열
         new Audio('resource/cute-level-up-2-189851.mp3').preload = 'auto';
+        
         // BGM도 유저 제스처 이후 시작
         startBgmIfNeeded();
-        if (state.audio.sfx.ctx && state.audio.sfx.ctx.state === 'suspended') {
-            const rp = state.audio.sfx.ctx.resume();
-            if (rp && typeof rp.catch === 'function') rp.catch(() => { /* ignore */ });
-        }
+        
         // 유저 제스처에서 "실제 play 성공"해야만 unlocked로 인정 (실패 시 다음 입력에서 재시도)
         el.volume = 0;
         const p = el.play();
@@ -234,6 +337,10 @@ function unlockAudioOnce() {
             p.then(() => {
                 state.audio.unlocked = true;
                 state.audio.wallRub.playing = true;
+                // 모바일: AudioContext가 다시 suspended 될 수 있으므로 주기적으로 체크
+                if (ctx && ctx.state === 'suspended') {
+                    ctx.resume().catch(() => {});
+                }
                 // 여기서는 바로 끄지 않고 0볼륨으로 유지(정책 회피 + 즉시 페이드인 가능)
             }).catch((err) => {
                 try { console.warn('[audio] unlock failed', err); } catch { /* ignore */ }

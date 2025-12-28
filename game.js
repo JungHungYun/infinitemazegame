@@ -274,6 +274,8 @@ const state = {
         gestureUnlocked: false,
         // wallRub(미디어 엘리먼트) 언락 성공 여부(자동재생 정책 통과)
         unlocked: false,
+        // 모바일 최적화: AudioContext 상태 체크 주기 관리
+        lastContextCheckMs: 0,
         wallRub: {
             src: 'resource/bench-grinder-for-chainsaw-37683.mp3',
             el: null,
@@ -305,6 +307,8 @@ const state = {
             master: 0.85,
             ctx: null,
             bufferCache: new Map(), // src -> AudioBuffer
+            audioPool: [], // Audio 엘리먼트 풀 (모바일 최적화)
+            maxPoolSize: 8, // 최대 풀 크기
         },
 
         // BGM
@@ -2608,6 +2612,17 @@ function update(dt) {
 
     // 금융/상환 등 "시간 기반" 로직은 모드/상점/설정과 무관하게 진행(게임오버 제외)
     updateEconomy(dt);
+    
+    // 모바일 최적화: AudioContext가 suspended 상태가 되면 주기적으로 resume 시도
+    // (매 프레임 체크는 비용이 크므로 1초마다만 체크)
+    if (!state.audio.lastContextCheckMs || (state.nowMs - state.audio.lastContextCheckMs) > 1000) {
+        const ctx = state.audio.sfx?.ctx;
+        if (ctx && ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+        }
+        state.audio.lastContextCheckMs = state.nowMs;
+    }
+    
     // 프레임 시작: 마찰 접촉 플래그 및 마찰열 연출 리셋
     if (state.mode === 'MAZE') {
         state.audio.wallRubContactThisFrame = false;
