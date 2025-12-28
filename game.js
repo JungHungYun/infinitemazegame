@@ -3269,27 +3269,8 @@ function updateChaser(dt) {
         playSfx('resource/chaser_missile-44538.mp3', { volume: 0.7, rate: 1.0 });
     }
 
-    // 플레이어와 직접 충돌 체크
-    // - 추격자가 "기절(stun)" 상태일 때는 몸박 데미지를 주지 않음
-    // - (기존에는 스턴/유예와 상관없이 체크해서, 스턴 중에도 데미지가 들어갈 수 있었음)
-    const pdx = state.player.mazePos.x - state.chaser.pos.x;
-    const pdy = state.player.mazePos.y - state.chaser.pos.y;
-    const pdist = Math.sqrt(pdx*pdx + pdy*pdy);
-    const isStunned = state.nowMs < state.chaser.stunUntilMs;
-    if (!isStunned && pdist < (CONFIG.PLAYER_RADIUS + CONFIG.CHASER_RADIUS) * 0.8) {
-        // 하트 1 감소 및 일시 무적(유예) 부여
-        if (state.nowMs > state.chaser.graceUntilMs) {
-            applyPlayerHit({
-                livesLoss: 1,
-                canUseShield: true,
-                flashA: 0.25,
-                flashColor: '#ff0000',
-                shake: 5.0,
-                sfx: 'resource/missile-explosion-168600.mp3',
-            });
-            state.chaser.graceUntilMs = state.nowMs + 1500; // 1.5초 유예
-        }
-    }
+    // 플레이어와 직접 충돌 체크는 제거 (잡힘 판정에서만 처리)
+    // 잡힘 판정(아래)에서만 하트 감소를 처리하여 중복 감소 방지
 
     // 스턴/유예/잡힘 시간 동안은 추격자 정지
     if (state.nowMs < state.chaser.stunUntilMs) return;
