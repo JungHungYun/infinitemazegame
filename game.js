@@ -4110,11 +4110,38 @@ function getFloor() {
     return (state.currentChunk?.y ?? 0) + 1;
 }
 
+function openWallBreakNoticeModal() {
+    const modal = document.getElementById('wallbreak-notice-modal');
+    const textEl = document.getElementById('wallbreak-notice-text');
+    const closeBtn = document.getElementById('wallbreak-notice-close');
+    if (!modal || !textEl || !closeBtn) return;
+    
+    textEl.textContent = '10층 도달: 벽부수기 능력을 자동으로 습득했습니다.';
+    modal.classList.remove('hidden');
+    
+    // 확인 버튼 클릭 시 모달 닫기
+    const closeHandler = () => {
+        modal.classList.add('hidden');
+        closeBtn.removeEventListener('click', closeHandler);
+    };
+    closeBtn.addEventListener('click', closeHandler);
+    
+    // ESC 키로도 닫기
+    const escHandler = (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+            closeHandler();
+            window.removeEventListener('keydown', escHandler);
+        }
+    };
+    window.addEventListener('keydown', escHandler);
+}
+
 function ensureAutoAbilitiesForFloor(floor) {
     // 10층부터 벽부수기 자동 습득
     if (floor >= 10 && !state.abilities.wallBreakUnlocked) {
         state.abilities.wallBreakUnlocked = true;
-        state.ui.abilityNotice = '10층 도달: 벽부수기 능력을 자동으로 습득했습니다.';
+        // 별도 모달로 표시 (스테이터스 창 대신)
+        openWallBreakNoticeModal();
     }
 }
 
