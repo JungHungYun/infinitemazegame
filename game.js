@@ -214,6 +214,7 @@ const state = {
         shopSlots: 3, // 기본 3개
         talismanCount: 0, // 부적 구매 횟수
         killMissileUnlocked: false, // 살상 미사일
+        interceptMissileUnlocked: false, // 요격 미사일
         maxLives: 3,
         shieldMax: 0, // 실드 최대치(구매로 증가, 최대 3)
         // 금융 어빌리티
@@ -3463,8 +3464,55 @@ function updateCollectiblesAndProjectiles(dt) {
             const m = state.missiles[i];
 
             // 유도(호밍) 및 히트 판정 대상 좌표
-            const targetX = state.boss.active ? 8.5 : state.chaser.pos.x;
-            const targetY = state.boss.active ? 8.5 : state.chaser.pos.y;
+            let targetX, targetY;
+            if (state.boss.active) {
+                targetX = 8.5;
+                targetY = 8.5;
+            } else if (state.abilities.interceptMissileUnlocked) {
+                // 요격미사일: 추적자와 추적자 미사일 중 플레이어에게 더 가까운 대상 선택
+                const px = state.player.mazePos.x;
+                const py = state.player.mazePos.y;
+                
+                let bestTarget = null;
+                let bestDist = Infinity;
+                
+                // 추적자 체크
+                if (state.chaser.active && state.chaser.isPresentInMaze) {
+                    const dx = px - state.chaser.pos.x;
+                    const dy = py - state.chaser.pos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestTarget = { x: state.chaser.pos.x, y: state.chaser.pos.y, type: 'chaser' };
+                    }
+                }
+                
+                // 추적자 미사일 체크
+                for (const proj of state.chaserProjectiles) {
+                    const dx = px - proj.pos.x;
+                    const dy = py - proj.pos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestTarget = { x: proj.pos.x, y: proj.pos.y, type: 'projectile', proj: proj };
+                    }
+                }
+                
+                if (bestTarget) {
+                    targetX = bestTarget.x;
+                    targetY = bestTarget.y;
+                    m.interceptTarget = bestTarget; // 타겟 정보 저장
+                } else {
+                    // 타겟이 없으면 기본 추적자
+                    targetX = state.chaser.pos.x;
+                    targetY = state.chaser.pos.y;
+                    m.interceptTarget = null;
+                }
+            } else {
+                targetX = state.chaser.pos.x;
+                targetY = state.chaser.pos.y;
+                m.interceptTarget = null;
+            }
 
             const dx = targetX - m.pos.x;
             const dy = targetY - m.pos.y;
@@ -3583,8 +3631,49 @@ function actuallyFireOneMissile() {
 
     // 플레이어 -> 추격자 방향으로 초기 발사(이후엔 유도 로직이 계속 보정)
     // 보스전일 때는 보스 중앙(8.5, 8.5)을 향함
-    const targetX = state.boss.active ? 8.5 : state.chaser.pos.x;
-    const targetY = state.boss.active ? 8.5 : state.chaser.pos.y;
+    // 요격미사일이면 추적자/추적자 미사일 중 가까운 대상 선택
+    let targetX, targetY;
+    if (state.boss.active) {
+        targetX = 8.5;
+        targetY = 8.5;
+    } else if (state.abilities.interceptMissileUnlocked) {
+        const px = state.player.mazePos.x;
+        const py = state.player.mazePos.y;
+        
+        let bestTarget = null;
+        let bestDist = Infinity;
+        
+        if (state.chaser.active && state.chaser.isPresentInMaze) {
+            const dx = px - state.chaser.pos.x;
+            const dy = py - state.chaser.pos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestTarget = { x: state.chaser.pos.x, y: state.chaser.pos.y };
+            }
+        }
+        
+        for (const proj of state.chaserProjectiles) {
+            const dx = px - proj.pos.x;
+            const dy = py - proj.pos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestTarget = { x: proj.pos.x, y: proj.pos.y };
+            }
+        }
+        
+        if (bestTarget) {
+            targetX = bestTarget.x;
+            targetY = bestTarget.y;
+        } else {
+            targetX = state.chaser.pos.x;
+            targetY = state.chaser.pos.y;
+        }
+    } else {
+        targetX = state.chaser.pos.x;
+        targetY = state.chaser.pos.y;
+    }
 
     const dx = targetX - state.player.mazePos.x;
     const dy = targetY - state.player.mazePos.y;

@@ -9,21 +9,22 @@ function initAbilityModalUI() {
 
     if (!modal || !rerollBtn || !skipBtn) return;
 
-    rerollBtn.addEventListener('click', () => {
+        rerollBtn.addEventListener('click', () => {
         if (!state.ui.modalOpen) return;
-        // 무료 티켓: 리롤 3회 무료
-        const freeLeft = Math.max(0, Math.floor(state.ui.freeRerollsLeft ?? 0));
-        const isFree = freeLeft > 0;
+        // 무료 티켓: 리롤 쿠폰을 재화처럼 사용
+        const freeTickets = Math.max(0, Math.floor(state.abilities?.freeRerollTickets ?? 0));
+        const isFree = freeTickets > 0;
         const cost = isFree ? 0 : state.ui.abilityRerollCost;
         if (!isFree) {
             if (state.coins < cost) return;
             state.coins -= cost;
             state.ui.abilityRerollCost += 1; // 유료 리롤: 비용 증가
         } else {
-            state.ui.freeRerollsLeft = freeLeft - 1;
+            // 티켓 사용 (재화처럼 직접 차감)
+            state.abilities.freeRerollTickets = freeTickets - 1;
             // 무료 소진 시 티켓 구매 직전 비용으로 복구
-            if ((state.ui.freeRerollsLeft ?? 0) <= 0) {
-                state.ui.abilityRerollCost = Math.max(1, Math.floor(state.ui.freeRerollRestoreCost ?? state.ui.abilityRerollCost ?? 1));
+            if (state.abilities.freeRerollTickets <= 0) {
+                state.ui.abilityRerollCost = Math.max(1, Math.floor(state.abilities.freeRerollRestoreCost ?? state.ui.abilityRerollCost ?? 1));
             }
         }
         state.ui.boughtAbilities.clear(); // 리롤하면 다시 구매 가능
@@ -389,6 +390,17 @@ const ABILITY_DEFS = [
         },
     },
     {
+        id: 'intercept_missile',
+        name: '요격미사일',
+        desc: '미사일이 추적자와 추적자 미사일을 자동으로 추적합니다. 플레이어에게 더 가까운 대상을 우선 타겟으로 하며, 추적자 미사일은 1방에 요격 가능합니다. 요격된 위치에서 3x3 범위의 벽이 파괴되어 전략적 우위를 확보할 수 있습니다.',
+        rarity: 'LEGENDARY',
+        cost: 20,
+        available: () => !state.abilities.interceptMissileUnlocked,
+        apply: () => {
+            state.abilities.interceptMissileUnlocked = true;
+        },
+    },
+    {
         id: 'shield',
         name: '보호막',
         desc: '피격을 1회 무효화하는 실드를 획득합니다. 실드가 피격을 막으면 1초간 무적 상태가 됩니다. 다음 청크로 넘어가면 실드가 최대치로 자동 재충전됩니다. 최대 3개까지 보유할 수 있으며, 구매 시 즉시 1개가 지급됩니다.',
@@ -420,10 +432,11 @@ function openAbilityModal(floor) {
     if (!state.ui.abilityNotice) state.ui.abilityNotice = '';
     // 화면은 월드로 두고(정지), 모달만 표시
     state.mode = 'WORLD';
-    // 무료 티켓: 남아있는 티켓을 이번 상점에 반영
-    state.ui.freeRerollsLeft = Math.max(0, Math.floor(state.abilities?.freeRerollTickets ?? 0));
+    // 무료 티켓: 재화처럼 직접 사용 (UI 변수는 표시용으로만 사용)
+    const freeTickets = Math.max(0, Math.floor(state.abilities?.freeRerollTickets ?? 0));
+    state.ui.freeRerollsLeft = freeTickets; // 표시용
     // 무료 티켓이 없을 때만 리롤 비용 초기화 (무료 티켓이 있으면 이전 상점의 비용 유지)
-    if (state.ui.freeRerollsLeft <= 0) {
+    if (freeTickets <= 0) {
         state.ui.abilityRerollCost = 1; // 층마다 리롤 비용 초기화 (무료 티켓 없을 때만)
     } else {
         // 무료 티켓이 있으면 이전 상점의 리롤 비용 복구
@@ -432,8 +445,8 @@ function openAbilityModal(floor) {
         }
     }
     // 티켓이 없던 상태에서 처음 구매하는 경우를 위해 현재 리롤 비용 저장
-    if ((state.abilities?.freeRerollTickets ?? 0) <= 0 && !state.abilities?.freeRerollRestoreCost) {
-        state.ui.freeRerollRestoreCost = Math.max(1, Math.floor(state.ui.abilityRerollCost || 1));
+    if (freeTickets <= 0 && !state.abilities?.freeRerollRestoreCost) {
+        state.abilities.freeRerollRestoreCost = Math.max(1, Math.floor(state.ui.abilityRerollCost || 1));
     }
     state.ui.boughtAbilities.clear();
     rollAbilityChoices();
@@ -452,10 +465,10 @@ function closeAbilityModal() {
     // 공지는 닫을 때 초기화(다음 상점에서 재사용 방지)
     state.ui.abilityNotice = '';
 
-    // 무료 티켓 잔여를 능력치에 다시 반영
-    state.abilities.freeRerollTickets = Math.max(0, Math.floor(state.ui.freeRerollsLeft ?? 0));
-    // 무료 티켓이 남아있으면 restoreCost 유지, 없으면 초기화
-    if ((state.abilities.freeRerollTickets ?? 0) <= 0) {
+    // 무료 티켓은 재화처럼 state.abilities.freeRerollTickets에 직접 저장되므로 별도 반영 불필요
+    // 다만 restoreCost는 업데이트
+    const freeTickets = Math.max(0, Math.floor(state.abilities?.freeRerollTickets ?? 0));
+    if (freeTickets <= 0) {
         state.abilities.freeRerollRestoreCost = 1;
     } else {
         // 무료 티켓이 남아있으면 현재 리롤 비용을 restoreCost로 저장
