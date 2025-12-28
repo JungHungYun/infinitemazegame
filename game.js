@@ -973,8 +973,11 @@ function buildChunkMazeTexture(chunk) {
                         const v = gunpowderWallVariants[(x * 31 + y * 17) % gunpowderWallVariants.length];
                         g.drawImage(v, px, py, tile, tile);
                     } else {
-                        // 일반 벽은 이미지 사용
+                        // 일반 벽은 이미지 사용 (명도 30% 감소)
+                        g.save();
+                        g.globalAlpha = 0.7; // 명도 30% 감소
                         g.drawImage(WALL_IMG, px, py, tile, tile);
+                        g.restore();
                     }
                 } else {
                     // 바닥 이미지 랜덤 선택
