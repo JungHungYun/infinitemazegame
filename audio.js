@@ -480,6 +480,18 @@ function setWallRubContact(isContact, intensity = 1) {
         // 강도에 따라 피치(살짝 상승)
         wr.rateTarget = (wr.rateBase ?? 1.0) + (wr.rateMaxUp ?? 0.12) * k;
 
+        // 모바일 최적화: iOS Safari는 한 번에 하나의 Audio 엘리먼트만 재생 가능
+        // wallRub 재생 시 BGM을 일시적으로 멈춤 (충돌 방지)
+        const bgm = state.audio.bgm;
+        if (bgm?.el && !bgm.el.paused) {
+            // BGM 일시 정지 및 원래 볼륨 저장
+            if (!wr.bgmWasPaused) {
+                wr.bgmWasPaused = true;
+                wr.bgmOriginalVolume = bgm.el.volume || bgm.volume || 0.35;
+                bgm.el.pause();
+            }
+        }
+
         // 필요하면 재생 시작(처음 접촉 시에만 currentTime 리셋)
         if (!wr.playing) {
             try { el.currentTime = 0; } catch { /* ignore */ }
@@ -517,6 +529,24 @@ function setWallRubContact(isContact, intensity = 1) {
         // 떨어졌으면 0.5초 디졸브(페이드아웃) 후 정지
         if (wr.playing && wr.fadeMode !== 'out') {
             startWallRubFade('out', 0, wr.fadeDurMs || 100);
+        }
+        
+        // 모바일 최적화: wallRub가 멈추면 BGM 재개
+        if (wr.bgmWasPaused) {
+            const bgm = state.audio.bgm;
+            if (bgm?.el && bgm.el.paused) {
+                // 페이드아웃이 완료된 후 BGM 재개 (0.2초 지연)
+                setTimeout(() => {
+                    if (!wr.playing && bgm.el && bgm.el.paused) {
+                        try {
+                            bgm.el.volume = wr.bgmOriginalVolume || bgm.volume || 0.35;
+                            const p = bgm.el.play();
+                            if (p && typeof p.catch === 'function') p.catch(() => {});
+                        } catch {}
+                        wr.bgmWasPaused = false;
+                    }
+                }, 200);
+            }
         }
     }
 }

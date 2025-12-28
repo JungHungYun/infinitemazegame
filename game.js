@@ -296,6 +296,9 @@ const state = {
             rateSmoothing: 0.18,  // 0..1 (클수록 더 빨리 따라감)
             rateTarget: 1.0,
             rateCurrent: 1.0,
+            // 모바일 최적화: BGM 일시 정지 상태 추적
+            bgmWasPaused: false,
+            bgmOriginalVolume: 0.35,
 
         },
         wallRubContactThisFrame: false,
