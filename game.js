@@ -104,6 +104,7 @@ const state = {
     mode: 'WORLD', // 'WORLD' 또는 'MAZE'
     currentChunk: { x: 2, y: 0 },
     chunks: new Map(),
+    visitedChunks: new Set(), // 이미 방문한 청크 추적
     player: {
         worldPos: { x: 2, y: 0 },
         // 미로 좌표계는 "타일 단위 연속좌표"로 통일합니다.
@@ -2319,6 +2320,10 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
     // 입장 방향에 따라 스폰 위치(한 칸 안쪽) 결정
     state.player.mazePos = getSpawnPosForEntry(entryDir);
     state.nextEntryDir = 'S'; // 기본값으로 되돌림(다음은 보통 남쪽에서 시작)
+    
+    // 현재 청크를 방문한 것으로 표시
+    const chunkKey = getChunkKey(x, y);
+    state.visitedChunks.add(chunkKey);
 
     // 최고 층 기록
     state.ui.maxFloorReached = Math.max(1, Math.floor(state.ui.maxFloorReached ?? 1), y + 1);
@@ -4300,8 +4305,14 @@ function exitMaze(dx, dy) {
         state.chaser.speedMult = Math.min(CONFIG.CHASER_MAX_SPEED_MULT, state.chaser.speedMult + CONFIG.CHASER_SPEEDUP_PER_CHUNK);
     }
 
-    // 다음 청크가 없으면 생성 후 바로 그 청크의 미로로 자동 진입
+    // 이미 방문한 청크로는 이동 불가
     const key = getChunkKey(nextX, nextY);
+    if (state.visitedChunks.has(key)) {
+        // 이미 방문한 청크로 이동하려고 하면 차단
+        return;
+    }
+    
+    // 다음 청크가 없으면 생성 후 바로 그 청크의 미로로 자동 진입
     if (!state.chunks.has(key)) state.chunks.set(key, new Chunk(nextX, nextY));
 
     // 10층마다 어빌리티 선택창(중복 방지) - 선택 후 다음 청크로 진입
@@ -4667,6 +4678,18 @@ function drawMiniMap(x, y, w, h) {
             ctx.fillStyle = fill;
             ctx.fillRect(px + 1, py + 1, cellW - 2, cellH - 2);
 
+            // 방문한 청크에 X 표시
+            if (isVisited && !isCurrent && ch) {
+                ctx.strokeStyle = 'rgba(100, 0, 0, 0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(px + 2, py + 2);
+                ctx.lineTo(px + cellW - 2, py + cellH - 2);
+                ctx.moveTo(px + cellW - 2, py + 2);
+                ctx.lineTo(px + 2, py + cellH - 2);
+                ctx.stroke();
+            }
+            
             // 현재 위치 강조
             if (wx === cx && wy === cy) {
                 ctx.strokeStyle = 'rgba(0,255,255,0.95)';
