@@ -171,14 +171,13 @@ const ABILITY_DEFS = [
     {
         id: 'missile_field_spawn',
         name: '무기고 확장',
-        desc: '필드에 미사일 아이템이 등장할 확률이 2.5% 증가합니다. 최대 100%까지 강화 가능하며, 최초 획득 시 한 청크에 동시에 등장할 수 있는 미사일 최대 개수가 5개로 증가합니다. 미사일을 더 많이 수집할 수 있습니다.',
+        desc: '필드에 미사일 아이템이 등장할 확률을 증가시킵니다. 1개 등장 확률 75%, 2개 30%, 3개 10%, 4개 5%, 5개 1%로 설정됩니다. 일회성 아이템입니다.',
         rarity: 'EPIC',
-        cost: 15,
-        available: () => (state.abilities.missileFieldSpawnBonus ?? 0) < 1.0,
+        cost: 30,
+        noExtraCost: true,
+        available: () => !state.abilities.missileFieldSpawnUnlocked,
         apply: () => {
-            const cur = state.abilities.missileFieldSpawnBonus ?? 0;
-            if ((state.abilities.maxFieldMissileItems ?? 1) < 5) state.abilities.maxFieldMissileItems = 5;
-            state.abilities.missileFieldSpawnBonus = Math.min(1.0, cur + 0.025);
+            state.abilities.missileFieldSpawnUnlocked = true;
         },
     },
     {
@@ -426,9 +425,14 @@ function openAbilityModal(floor) {
     // 무료 티켓이 없을 때만 리롤 비용 초기화 (무료 티켓이 있으면 이전 상점의 비용 유지)
     if (state.ui.freeRerollsLeft <= 0) {
         state.ui.abilityRerollCost = 1; // 층마다 리롤 비용 초기화 (무료 티켓 없을 때만)
+    } else {
+        // 무료 티켓이 있으면 이전 상점의 리롤 비용 복구
+        if (state.abilities?.freeRerollRestoreCost && state.abilities.freeRerollRestoreCost > 1) {
+            state.ui.abilityRerollCost = state.abilities.freeRerollRestoreCost;
+        }
     }
     // 티켓이 없던 상태에서 처음 구매하는 경우를 위해 현재 리롤 비용 저장
-    if ((state.abilities?.freeRerollTickets ?? 0) <= 0) {
+    if ((state.abilities?.freeRerollTickets ?? 0) <= 0 && !state.abilities?.freeRerollRestoreCost) {
         state.ui.freeRerollRestoreCost = Math.max(1, Math.floor(state.ui.abilityRerollCost || 1));
     }
     state.ui.boughtAbilities.clear();
@@ -453,6 +457,9 @@ function closeAbilityModal() {
     // 무료 티켓이 남아있으면 restoreCost 유지, 없으면 초기화
     if ((state.abilities.freeRerollTickets ?? 0) <= 0) {
         state.abilities.freeRerollRestoreCost = 1;
+    } else {
+        // 무료 티켓이 남아있으면 현재 리롤 비용을 restoreCost로 저장
+        state.abilities.freeRerollRestoreCost = Math.max(1, Math.floor(state.ui.abilityRerollCost || 1));
     }
     state.ui.freeRerollsLeft = 0;
     state.ui.freeRerollRestoreCost = 1;

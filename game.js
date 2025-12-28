@@ -151,6 +151,9 @@ const state = {
         respawnTimerMs: 0,
         // 보스전 종료 직후 스폰/미사일 난사 방지용 쿨다운
         bossCooldownUntilMs: 0,
+        // 추격자 체력 (미사일 기본 공격력의 5배)
+        hp: CONFIG.MISSILE_DAMAGE * 5,
+        maxHp: CONFIG.MISSILE_DAMAGE * 5,
     },
     chaserProjectiles: [], // {pos, vel}
 
@@ -1821,6 +1824,7 @@ function restartRun() {
         missileSpawnChanceMult: 1.0,
         missileFieldSpawnBonus: 0,
         maxFieldMissileItems: 1,
+        missileFieldSpawnUnlocked: false,
         missileStunBonusMs: 0,
         missileCount: 1,
         moveSpeedMult: 1.0,
@@ -1875,7 +1879,7 @@ function restartRun() {
     };
 
     // 추격자/보스 초기화
-    state.boss = { active: false, hp: 0, maxHp: 50, lastAttackMs: 0, lasers: [], missileSpawnMs: 0 };
+    state.boss = { active: false, hp: 0, maxHp: 50, lastAttackMs: 0, lasers: [], gridPatterns: [], missileSpawnMs: 0 };
     state.chaser = {
         active: false,
         chunk: { x: CONFIG.START_CHUNK_X, y: CONFIG.START_CHUNK_Y },
@@ -1898,6 +1902,8 @@ function restartRun() {
         deadUntilNextChunk: false,
         respawnTimerMs: 0,
         bossCooldownUntilMs: 0,
+        hp: CONFIG.MISSILE_DAMAGE * 5,
+        maxHp: CONFIG.MISSILE_DAMAGE * 5,
     };
 
     // 청크/카메라/입구 초기화
@@ -2458,6 +2464,9 @@ function scheduleChaserEntryIntoPlayerChunk(playerEntryDir) {
 function materializeChaserIntoPlayerChunk(entryDir) {
     state.chaser.chunk = { x: state.currentChunk.x, y: state.currentChunk.y };
     state.chaser.respawnTimerMs = 0; // 타이머 초기화
+    // 추적자 체력 복구 (부활 시)
+    state.chaser.hp = CONFIG.MISSILE_DAMAGE * 5;
+    state.chaser.maxHp = CONFIG.MISSILE_DAMAGE * 5;
 
     // 최초 스폰(RANDOM)은 예약된 좌표 사용
     if (entryDir === 'RANDOM' && state.chaser.entryScheduledPos) {
@@ -3275,6 +3284,41 @@ function spawnItemForChunkIfNeeded() {
     if (state.items?.length) return;
     if (!state.items) state.items = [];
 
+    // 무기고 확장 어빌리티가 있으면 새로운 확률 시스템 사용
+    if (state.abilities?.missileFieldSpawnUnlocked) {
+        // 확률: 1개 75%, 2개 30%, 3개 10%, 4개 5%, 5개 1%
+        const probs = [0.75, 0.30, 0.10, 0.05, 0.01];
+        let itemCount = 0;
+        for (let i = 0; i < probs.length; i++) {
+            if (Math.random() < probs[i]) {
+                itemCount = i + 1;
+            }
+        }
+        
+        const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
+        const maze = chunk.maze;
+        const size = CONFIG.MAZE_SIZE;
+
+        for (let n = 0; n < itemCount; n++) {
+            // 랜덤 빈 칸 찾기(최대 200회)
+            for (let i = 0; i < 200; i++) {
+                const x = Math.floor(Math.random() * size);
+                const y = Math.floor(Math.random() * size);
+                if (maze[y][x] !== 0) continue;
+                // 출구 중앙 줄 근처는 피하기(너무 공짜가 됨)
+                if (y <= 1 || y >= size - 2 || x <= 1 || x >= size - 2) continue;
+                const px = x + 0.5;
+                const py = y + 0.5;
+                if (checkWallCollision(px, py, 0.22, maze)) continue;
+                if (state.items.some(it => (it.pos.x - px) ** 2 + (it.pos.y - py) ** 2 < 0.9 ** 2)) continue;
+                state.items.push({ pos: { x: px, y: py } });
+                break;
+            }
+        }
+        return;
+    }
+
+    // 기존 시스템 (무기고 확장 없을 때)
     const mult = state.abilities?.missileSpawnChanceMult ?? 1.0;
     const bonus = Math.max(0, Math.min(1.0, state.abilities?.missileFieldSpawnBonus ?? 0));
     const chance = Math.min(0.95, CONFIG.ITEM_SPAWN_CHANCE * mult * (1 + bonus));
@@ -3620,20 +3664,31 @@ function onMissileHitTarget(m) {
             });
         }
     } else {
-        // 살상 미사일 체크
+        // 치명타 미사일: 추적자에게 대미지
         if (state.abilities.killMissileUnlocked) {
-            state.chaser.isPresentInMaze = false;
-            state.chaser.deadUntilNextChunk = true;
-            addScore(500, getFloor());
-            // 폭발 효과
-            fxBurstMaze(state.chaser.pos.x, state.chaser.pos.y, {
-                kind: 'spark',
-                count: 40,
-                color: 'rgba(255, 50, 50, 0.95)',
-                lifeMs: 600,
-                speed: 12,
-                glow: 40
-            });
+            state.chaser.hp = (state.chaser.hp || CONFIG.MISSILE_DAMAGE * 5) - damage;
+            state.chaser.maxHp = state.chaser.maxHp || CONFIG.MISSILE_DAMAGE * 5;
+            
+            // 추적자 처치
+            if (state.chaser.hp <= 0) {
+                state.chaser.hp = 0;
+                state.chaser.isPresentInMaze = false;
+                state.chaser.deadUntilNextChunk = true;
+                addScore(500, getFloor());
+                // 폭발 효과
+                fxBurstMaze(state.chaser.pos.x, state.chaser.pos.y, {
+                    kind: 'spark',
+                    count: 40,
+                    color: 'rgba(255, 50, 50, 0.95)',
+                    lifeMs: 600,
+                    speed: 12,
+                    glow: 40
+                });
+            } else {
+                // 대미지 입었지만 살아있음 - 스턴 적용
+                const stunMs = CONFIG.STUN_MS + (state.abilities.missileStunBonusMs || 0);
+                state.chaser.stunUntilMs = Math.max(state.chaser.stunUntilMs, state.nowMs + stunMs);
+            }
         } else {
             // 기존 스턴 로직
             const stunMs = CONFIG.STUN_MS + (state.abilities.missileStunBonusMs || 0);

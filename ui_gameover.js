@@ -87,10 +87,7 @@ function openGameOverModal() {
             });
     }
 
-    // 게임오버 후 메인(타이틀) 화면으로 자동 복귀
-    setTimeout(() => {
-        if (typeof window.goToTitleScreen === 'function') window.goToTitleScreen();
-    }, 2000);
+    // 게임오버 후 사용자가 액션을 취할 때까지 대기 (자동 복귀 제거)
 }
 
 
