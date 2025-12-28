@@ -5406,13 +5406,19 @@ function drawMaze() {
             const x = offsetX + c.x * cellSize;
             const y = offsetY + c.y * cellSize;
             const bob = Math.sin((state.nowMs + c.x * 1000) * 0.006) * (cellSize * 0.04);
-            const s = cellSize * 0.16;
+            const s = cellSize * 0.48; // 크기 3배 증가 (0.16 -> 0.48)
             
             // 코인 애니메이션: coin_front -> coin_45 -> coin_side -> coin_45(좌우반전) -> coin_front 반복
             // 각 프레임당 약 150ms (총 600ms 사이클)
             const animSpeed = 150; // ms per frame
             const animTime = (state.nowMs + c.x * 1000) % (animSpeed * 4);
             const frame = Math.floor(animTime / animSpeed);
+            
+            // 명도 점멸 효과 (시인성 향상)
+            const blinkSpeed = 800; // ms per cycle
+            const blinkTime = (state.nowMs + c.x * 500) % blinkSpeed;
+            const blinkT = Math.sin((blinkTime / blinkSpeed) * Math.PI * 2);
+            const brightness = 0.85 + 0.15 * blinkT; // 0.85 ~ 1.0 사이에서 변화
             
             let coinImg = null;
             let flipX = false;
@@ -5436,15 +5442,20 @@ function drawMaze() {
             
             if (imgReady) {
                 ctx.imageSmoothingEnabled = true;
+                // 명도 점멸 효과 적용
+                ctx.globalAlpha = brightness;
                 if (flipX) {
                     ctx.scale(-1, 1);
                     ctx.drawImage(coinImg, -s / 2, -s / 2, s, s);
                 } else {
                     ctx.drawImage(coinImg, -s / 2, -s / 2, s, s);
                 }
+                ctx.globalAlpha = 1.0;
             } else {
                 // 폴백: 이미지가 로드되지 않았을 때 기존 픽셀 블록 렌더링
                 ctx.imageSmoothingEnabled = false;
+                // 명도 점멸 효과 적용
+                ctx.globalAlpha = brightness;
                 ctx.fillStyle = 'rgba(255, 210, 77, 0.95)';
                 ctx.strokeStyle = 'rgba(0,0,0,0.7)';
                 ctx.lineWidth = 2;
@@ -5452,6 +5463,7 @@ function drawMaze() {
                 ctx.strokeRect(-s / 2 + 0.5, -s / 2 + 0.5, s - 1, s - 1);
                 ctx.fillStyle = 'rgba(255,255,255,0.65)';
                 ctx.fillRect(-s / 2 + 2, -s / 2 + 2, 3, 3);
+                ctx.globalAlpha = 1.0;
             }
             
             ctx.restore();
