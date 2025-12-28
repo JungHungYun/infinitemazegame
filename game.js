@@ -2770,30 +2770,43 @@ function update(dt) {
         updateCollectiblesAndProjectiles(dt);
         updateFx(dt);
 
-        // 추격자 투사체 업데이트
+        // 추격자 투사체 업데이트 (추적자가 있는 청크에서만)
         for (let i = state.chaserProjectiles.length - 1; i >= 0; i--) {
             const p = state.chaserProjectiles[i];
+            // 미사일이 속한 청크 정보가 없으면 기본값으로 현재 추적자 청크 사용
+            const projChunk = p.chunk || state.chaser.chunk;
+            const projChunkKey = getChunkKey(projChunk.x, projChunk.y);
+            const projChunkObj = state.chunks.get(projChunkKey);
+            if (!projChunkObj) {
+                // 미사일이 속한 청크가 없으면 제거
+                state.chaserProjectiles.splice(i, 1);
+                continue;
+            }
+            
             p.pos.x += p.vel.x * dtSec;
             p.pos.y += p.vel.y * dtSec;
 
-            // 플레이어 충돌
-            const dx = state.player.mazePos.x - p.pos.x;
-            const dy = state.player.mazePos.y - p.pos.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist < CONFIG.PLAYER_RADIUS + 0.1) {
-                state.chaserProjectiles.splice(i, 1);
-                applyPlayerHit({
-                    livesLoss: 1,
-                    canUseShield: true,
-                    flashA: 0.2,
-                    flashColor: '#ff0000',
-                    shake: 3.0,
-                    sfx: 'resource/missile-explosion-168600.mp3',
-                });
-                continue;
+            // 플레이어와 같은 청크에 있을 때만 충돌 체크
+            const isPlayerInProjChunk = state.currentChunk.x === projChunk.x && state.currentChunk.y === projChunk.y;
+            if (isPlayerInProjChunk) {
+                const dx = state.player.mazePos.x - p.pos.x;
+                const dy = state.player.mazePos.y - p.pos.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < CONFIG.PLAYER_RADIUS + 0.1) {
+                    state.chaserProjectiles.splice(i, 1);
+                    applyPlayerHit({
+                        livesLoss: 1,
+                        canUseShield: true,
+                        flashA: 0.2,
+                        flashColor: '#ff0000',
+                        shake: 3.0,
+                        sfx: 'resource/missile-explosion-168600.mp3',
+                    });
+                    continue;
+                }
             }
 
-            // 맵 밖 제거
+            // 맵 밖 제거 (청크 경계를 넘어가면 제거)
             if (p.pos.x < -2 || p.pos.x > CONFIG.MAZE_SIZE + 2 || p.pos.y < -2 || p.pos.y > CONFIG.MAZE_SIZE + 2) {
                 state.chaserProjectiles.splice(i, 1);
             }
@@ -3229,8 +3242,10 @@ function updateChaser(dt) {
     if (state.boss.active) return;
     // 보스전 직후엔 일정 시간 추격자/미사일 등장 금지
     if (state.chaser.bossCooldownUntilMs && state.nowMs < state.chaser.bossCooldownUntilMs) return;
-    // 추격자는 플레이어와 같은 청크에 있다고 가정(청크 넘어갈 때 함께 진입)
-    const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
+    // 추격자는 자신의 청크에 있음 (플레이어와 다른 청크에 있을 수 있음)
+    const chaserChunkKey = getChunkKey(state.chaser.chunk.x, state.chaser.chunk.y);
+    const chunk = state.chunks.get(chaserChunkKey);
+    if (!chunk) return; // 추격자 청크가 없으면 업데이트 불가
     const maze = chunk.maze;
 
     // 살상 미사일에 의해 파괴된 경우 처리
@@ -3258,8 +3273,11 @@ function updateChaser(dt) {
         }
     }
 
-    // 20렙부터 레이저 발사
-    if (getFloor() >= 20 && state.nowMs - state.chaser.lastShotMs > 5000) {
+    // 플레이어와 같은 청크에 있을 때만 미사일 발사 및 충돌 체크
+    const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.currentChunk.y === state.chaser.chunk.y;
+    
+    // 20렙부터 레이저 발사 (같은 청크에 있을 때만)
+    if (isPlayerInChaserChunk && getFloor() >= 20 && state.nowMs - state.chaser.lastShotMs > 5000) {
         state.chaser.lastShotMs = state.nowMs;
         const dx = state.player.mazePos.x - state.chaser.pos.x;
         const dy = state.player.mazePos.y - state.chaser.pos.y;
@@ -3267,31 +3285,34 @@ function updateChaser(dt) {
         const speed = CONFIG.MISSILE_SPEED / 2;
         state.chaserProjectiles.push({
             pos: { x: state.chaser.pos.x, y: state.chaser.pos.y },
-            vel: { x: (dx/dist)*speed, y: (dy/dist)*speed }
+            vel: { x: (dx/dist)*speed, y: (dy/dist)*speed },
+            chunk: { x: state.chaser.chunk.x, y: state.chaser.chunk.y } // 미사일이 속한 청크 저장
         });
         // 추적자 미사일 발사 소리
         playSfx('resource/chaser_missile-44538.mp3', { volume: 0.7, rate: 1.0 });
     }
 
-    // 플레이어와 직접 충돌 체크
+    // 플레이어와 직접 충돌 체크 (같은 청크에 있을 때만)
     // - 추격자가 "기절(stun)" 상태일 때는 몸박 데미지를 주지 않음
     // - (기존에는 스턴/유예와 상관없이 체크해서, 스턴 중에도 데미지가 들어갈 수 있었음)
-    const pdx = state.player.mazePos.x - state.chaser.pos.x;
-    const pdy = state.player.mazePos.y - state.chaser.pos.y;
-    const pdist = Math.sqrt(pdx*pdx + pdy*pdy);
-    const isStunned = state.nowMs < state.chaser.stunUntilMs;
-    if (!isStunned && pdist < (CONFIG.PLAYER_RADIUS + CONFIG.CHASER_RADIUS) * 0.8) {
-        // 하트 1 감소 및 일시 무적(유예) 부여
-        if (state.nowMs > state.chaser.graceUntilMs) {
-            applyPlayerHit({
-                livesLoss: 1,
-                canUseShield: true,
-                flashA: 0.25,
-                flashColor: '#ff0000',
-                shake: 5.0,
-                sfx: 'resource/missile-explosion-168600.mp3',
-            });
-            state.chaser.graceUntilMs = state.nowMs + 1500; // 1.5초 유예
+    if (isPlayerInChaserChunk) {
+        const pdx = state.player.mazePos.x - state.chaser.pos.x;
+        const pdy = state.player.mazePos.y - state.chaser.pos.y;
+        const pdist = Math.sqrt(pdx*pdx + pdy*pdy);
+        const isStunned = state.nowMs < state.chaser.stunUntilMs;
+        if (!isStunned && pdist < (CONFIG.PLAYER_RADIUS + CONFIG.CHASER_RADIUS) * 0.8) {
+            // 하트 1 감소 및 일시 무적(유예) 부여
+            if (state.nowMs > state.chaser.graceUntilMs) {
+                applyPlayerHit({
+                    livesLoss: 1,
+                    canUseShield: true,
+                    flashA: 0.25,
+                    flashColor: '#ff0000',
+                    shake: 5.0,
+                    sfx: 'resource/missile-explosion-168600.mp3',
+                });
+                state.chaser.graceUntilMs = state.nowMs + 1500; // 1.5초 유예
+            }
         }
     }
 
@@ -3321,11 +3342,11 @@ function updateChaser(dt) {
         state.chaser.pathIndex >= state.chaser.path.length;
 
     if (needRepath) {
-        const path = bfsPath(maze, chaserTile, playerTile);
+        const path = bfsPath(maze, chaserTile, targetTile);
         state.chaser.path = path;
         state.chaser.pathIndex = path.length > 1 ? 1 : 0;
         state.chaser.lastRepathMs = state.nowMs;
-        state.chaser.lastTargetTile = { ...playerTile };
+        state.chaser.lastTargetTile = { ...targetTile };
     }
 
     if (state.chaser.path.length <= 1) {
@@ -4237,17 +4258,8 @@ function checkExits() {
     // 중심 좌표 기준: 유효 영역은 (0~size)이며 타일 중심은 0.5~size-0.5
     if (p.y < 0) exitMaze(0, 1); // North (Y 증가가 북쪽)
     else if (p.y > CONFIG.MAZE_SIZE) {
-        // 첫 번째 행(y=0)에서 시작 청크 외에는 남쪽으로 내려갈 수 없음(아래 막힘)
-        if (
-            state.currentChunk.y === 0 &&
-            !(state.currentChunk.x === CONFIG.START_CHUNK_X && state.currentChunk.y === CONFIG.START_CHUNK_Y)
-        ) {
-            state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
-        } else {
-            // 시작 청크의 남쪽은 "외부 시작점" 개념이라 실제로 아래 청크로 이동은 금지
-            // (dy=-1로 나가면 y가 0으로 clamp되어 같은 청크로 다시 들어가 버릴 수 있음)
-            state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
-        }
+        // 남쪽으로 이동 가능 (아래로 진행)
+        exitMaze(0, -1);
     }
     else if (p.x < 0) {
         // 맨 왼쪽 청크는 서쪽 막힘
@@ -4270,18 +4282,15 @@ function exitMaze(dx, dy) {
     const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
     chunk.cleared = true;
 
-    // 추격자 리스폰 시간:
-    // - 현재 청크에서 "추격자 위치 → 내가 나간 출구 위치" 최단거리(BFS)로 1~5초 결정
-    // - 아직 추격자가 리스폰/등장도 안 했던 상태(INBOUND)에서 청크를 탈출하면 무조건 5초
-    if (state.chaser.active) {
-        state.chaser.nextEntryDelayMs = computeChaserRespawnDelayMsFromExit(chunk, dx, dy);
-    }
+    // 추격자는 이전 청크에 남아있음 (플레이어가 청크를 넘어가도 추격자는 이전 청크에 유지)
+    // 추격자가 플레이어를 따라오려면 추격자도 같은 방향으로 청크를 넘어가야 함
+    // 하지만 플레이어가 청크를 넘어갈 때 추격자는 이전 청크에 남아있도록 함
+    // 추격자가 있는 청크는 별도로 업데이트되어야 함
 
     // 안전장치: 좌/우 끝 청크는 바깥으로 이동 금지
     if (dx === -1 && state.currentChunk.x === 0) return;
     if (dx === 1 && state.currentChunk.x === CONFIG.CHUNK_COLS - 1) return;
-    // 첫 번째 행에서 남쪽(아래)로 이동 금지 (시작 청크 포함: 아래 청크가 없음)
-    if (dy === -1 && state.currentChunk.y === 0) return;
+    // 남쪽(아래)로 이동 가능 (제한 제거)
 
     // 다음 청크 좌표 계산(정수)
     const prevWorldY = Math.round(state.player.worldPos.y);
