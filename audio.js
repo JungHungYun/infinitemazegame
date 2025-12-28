@@ -601,7 +601,7 @@ function setWallRubContact(isContact, intensity = 1) {
     
     // 레거시: Audio 엘리먼트 사용 (WebAudio가 없는 경우)
     const el = ensureWallRubAudioElement();
-    if (!el) return;
+    if (!el || typeof el.play !== 'function') return;
 
     if (isContact) {
         // 강도에 따라 볼륨 스케일
@@ -617,14 +617,23 @@ function setWallRubContact(isContact, intensity = 1) {
             // 시작 시 피치도 초기화
             wr.rateCurrent = wr.rateTarget;
             try { el.playbackRate = wr.rateCurrent; } catch { /* ignore */ }
-            const p = el.play();
-            wr.playing = true;
-            if (p && typeof p.catch === 'function') p.catch(() => { /* ignore */ });
+            try {
+                const p = el.play();
+                wr.playing = true;
+                if (p && typeof p.catch === 'function') p.catch(() => { /* ignore */ });
+            } catch (e) {
+                // play() 실패 시 무시
+                wr.playing = false;
+            }
         } else {
             // 혹시 pause된 상태면 다시 play 시도(정책/탭 상태 등)
             if (el.paused) {
-                const p = el.play();
-                if (p && typeof p.catch === 'function') p.catch(() => { /* ignore */ });
+                try {
+                    const p = el.play();
+                    if (p && typeof p.catch === 'function') p.catch(() => { /* ignore */ });
+                } catch (e) {
+                    // play() 실패 시 무시
+                }
             }
         }
 

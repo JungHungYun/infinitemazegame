@@ -52,15 +52,23 @@ async function preloadGameImages() {
     // 중복 호출 방지
     if (GAME_IMG_READY) return true;
     try {
+        // 필수 이미지들
         await Promise.all([
             loadImageWithDebug(CHASER_IMG, 'resource/imgage/chaser.png', '추격자 이미지'),
             loadImageWithDebug(MISSILE_IMG, 'resource/imgage/misslie.png', '플레이어 미사일 이미지'),
             loadImageWithDebug(CHASER_MISSILE_IMG, 'resource/imgage/chaser_misslie.png', '추격자 미사일 이미지'),
             loadImageWithDebug(BOSS_IMG, 'resource/imgage/boss.png', '보스 이미지'),
-            loadImageWithDebug(COIN_FRONT_IMG, 'resource/imgage/coin_front.png', '코인 앞면 이미지'),
-            loadImageWithDebug(COIN_45_IMG, 'resource/imgage/coin_45.png', '코인 45도 이미지'),
-            loadImageWithDebug(COIN_SIDE_IMG, 'resource/imgage/coin_side.png', '코인 옆면 이미지'),
         ]);
+        
+        // 코인 이미지들은 선택적 로드 (파일이 없어도 게임 진행 가능)
+        Promise.all([
+            loadImageWithDebug(COIN_FRONT_IMG, 'resource/imgage/coin_front.png', '코인 앞면 이미지').catch(() => {}),
+            loadImageWithDebug(COIN_45_IMG, 'resource/imgage/coin_45.png', '코인 45도 이미지').catch(() => {}),
+            loadImageWithDebug(COIN_SIDE_IMG, 'resource/imgage/coin_side.png', '코인 옆면 이미지').catch(() => {}),
+        ]).catch(() => {
+            // 코인 이미지 로드 실패는 무시 (폴백 렌더링 사용)
+        });
+        
         GAME_IMG_READY = true;
         GAME_IMG_ERROR = '';
         return true;
