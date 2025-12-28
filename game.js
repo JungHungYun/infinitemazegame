@@ -956,21 +956,24 @@ function buildChunkMazeTexture(chunk) {
             // 타일 이미지 사용 (로드되었으면)
             const useTileImages = WALL_IMG.complete && WALL_IMG.naturalWidth > 0 && GROUND_IMGS[0].complete && GROUND_IMGS[0].naturalWidth > 0;
             
+            // 타일 이미지 사용 (로드되었으면)
+            const useTileImages = WALL_IMG.complete && WALL_IMG.naturalWidth > 0 && GROUND_IMGS[0].complete && GROUND_IMGS[0].naturalWidth > 0;
+            
             if (useTileImages) {
                 if (isWall) {
                     // 벽 이미지 사용 (특수 벽은 기존 방식 유지)
                     const hasGunpowder = hasGunpowderMarkOnWall(chunk, x, y, wallValue);
                     if (wallValue === 100) {
                         // 사금벽은 기존 방식
-                        v = goldWallVariants[(x * 31 + y * 17) % goldWallVariants.length];
+                        const v = goldWallVariants[(x * 31 + y * 17) % goldWallVariants.length];
                         g.drawImage(v, px, py, tile, tile);
                     } else if (wallValue === 200) {
                         // 검정 벽은 기존 방식
-                        v = blackWallVariants[(x * 31 + y * 17) % blackWallVariants.length];
+                        const v = blackWallVariants[(x * 31 + y * 17) % blackWallVariants.length];
                         g.drawImage(v, px, py, tile, tile);
                     } else if (hasGunpowder) {
                         // 화약벽은 기존 방식
-                        v = gunpowderWallVariants[(x * 31 + y * 17) % gunpowderWallVariants.length];
+                        const v = gunpowderWallVariants[(x * 31 + y * 17) % gunpowderWallVariants.length];
                         g.drawImage(v, px, py, tile, tile);
                     } else {
                         // 일반 벽은 이미지 사용
@@ -984,7 +987,7 @@ function buildChunkMazeTexture(chunk) {
                         g.drawImage(groundImg, px, py, tile, tile);
                     } else {
                         // 이미지가 로드되지 않았으면 폴백
-                        v = floorVariants[(x * 31 + y * 17) % floorVariants.length];
+                        const v = floorVariants[(x * 31 + y * 17) % floorVariants.length];
                         g.drawImage(v, px, py, tile, tile);
                     }
                 }
