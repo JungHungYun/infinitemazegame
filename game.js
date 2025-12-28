@@ -2402,6 +2402,21 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
             } else {
                 // 추격자가 다른 청크에 있으면 입구 진입 예약하지 않음 (이전 청크에서 계속 활동)
                 // 경로 기반 시뮬레이션은 계속 진행됨
+                // 단, 경로가 없으면 추적자를 플레이어 청크로 이동시켜야 함
+                const pathHistory = state.player.pathHistory || [];
+                const pathIndex = state.chaser.pathHistoryIndex || 0;
+                if (pathIndex >= pathHistory.length) {
+                    // 경로가 없으면 추적자를 플레이어 청크로 이동
+                    state.chaser.chunk.x = x;
+                    state.chaser.chunk.y = y;
+                    const entryPos = getSpawnPosForEntry(entryDir);
+                    state.chaser.pos = { ...entryPos };
+                    state.chaser.isPresentInMaze = false;
+                    state.chaser.entryScheduledDir = entryDir;
+                    state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
+                    state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
+                    state.chaser.pathHistoryIndex = 0;
+                }
             }
         }
     }
@@ -3435,11 +3450,9 @@ function updateChaser(dt) {
     const pathHistory = state.player.pathHistory || [];
     const pathIndex = state.chaser.pathHistoryIndex || 0;
     
-    // 추적자가 플레이어와 같은 청크에 도달했는지 확인
-    // (경로를 따라가다가 플레이어 청크에 도달한 경우)
+    // 경로가 없거나 끝났으면 플레이어와 같은 청크에 도달한 것
     if (pathIndex >= pathHistory.length) {
-        // 경로가 끝났으면 플레이어와 같은 청크에 도달한 것
-        // 추적자를 플레이어 청크로 이동시키고 직접 추적 모드로 전환
+        // 추적자가 플레이어 청크에 있지 않으면 이동
         if (state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y) {
             state.chaser.chunk.x = state.currentChunk.x;
             state.chaser.chunk.y = state.currentChunk.y;
@@ -3454,9 +3467,9 @@ function updateChaser(dt) {
             state.chaser.pathIndex = 0;
             state.chaser.lastRepathMs = 0;
             state.chaser.lastTargetTile = null;
-            // 경로 기반 시뮬레이션 리셋 (플레이어와 같은 청크에 도달했으므로)
-            state.chaser.pathHistoryIndex = 0;
         }
+        // 경로 기반 시뮬레이션 리셋 (플레이어와 같은 청크에 도달했으므로)
+        state.chaser.pathHistoryIndex = 0;
         return;
     }
     
