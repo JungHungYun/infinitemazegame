@@ -2831,6 +2831,7 @@ function updateBoss(dt) {
         state.boss.maxHp = CONFIG.BOSS_HEALTH;
         state.boss.lastAttackMs = state.nowMs;
         state.boss.missileSpawnMs = state.nowMs;
+        state.boss.gridPatterns = []; // 격자 패턴 초기화
         // 보스전에서는 추격자 비활성화
         state.chaser.isPresentInMaze = false;
         // 보스전 중에는 추격자 미사일이 나오면 안됨(기존 발사체도 제거)
