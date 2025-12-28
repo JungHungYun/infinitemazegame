@@ -155,6 +155,14 @@ async function loadSfxBuffer(src) {
     const isLocal = location.protocol === 'file:' || location.origin === 'null' || !location.origin || location.protocol === 'about:';
     if (isLocal) return null;
 
+    // 메모리 누수 방지: 버퍼 캐시 크기 제한 (최대 20개)
+    const MAX_BUFFER_CACHE = 20;
+    if (sfx.bufferCache.size >= MAX_BUFFER_CACHE) {
+        // 가장 오래된 항목 제거 (FIFO)
+        const firstKey = sfx.bufferCache.keys().next().value;
+        if (firstKey) sfx.bufferCache.delete(firstKey);
+    }
+
     try {
         const res = await fetch(src);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -413,7 +421,8 @@ function tickWallRubAudio(nowMs) {
 
 function setWallRubContact(isContact, intensity = 1) {
     const wr = state.audio.wallRub;
-    if (!state.audio.unlocked) return;
+    // 모바일 최적화: unlocked 대신 gestureUnlocked 체크 (마찰소리는 제스처만 있으면 재생 가능)
+    if (!state.audio.gestureUnlocked) return;
     const el = ensureWallRubAudioElement();
 
     if (isContact) {

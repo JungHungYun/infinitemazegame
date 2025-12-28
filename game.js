@@ -1969,6 +1969,20 @@ function generateVisibleChunks() {
     const startY = Math.max(0, state.player.worldPos.y - viewDist);
     const endY = state.player.worldPos.y + viewDist;
 
+    // 메모리 누수 방지: 보이지 않는 청크 제거
+    const keepDist = viewDist + 2; // 보이는 거리보다 조금 더 유지
+    const keepStartY = Math.max(0, state.player.worldPos.y - keepDist);
+    const keepEndY = state.player.worldPos.y + keepDist;
+    
+    // 오래된 청크 제거 (메모리 누수 방지)
+    if (state.chunks.size > 100) { // 청크가 너무 많아지면 정리
+        for (const [key, chunk] of state.chunks.entries()) {
+            if (chunk.y < keepStartY || chunk.y > keepEndY) {
+                state.chunks.delete(key);
+            }
+        }
+    }
+
     for (let y = startY; y <= endY; y++) {
         for (let x = 0; x < CONFIG.CHUNK_COLS; x++) {
             const key = getChunkKey(x, y);
@@ -4028,7 +4042,8 @@ function drawHUD() {
     ctx.restore();
 
     const maxLives = Math.max(0, state.abilities?.maxLives ?? 3);
-    const lives = Math.max(0, Math.min(maxLives, state.player.lives || 0));
+    // 모바일 버그 수정: lives 값을 명시적으로 Number로 변환하여 정확히 읽기
+    const lives = Math.max(0, Math.min(maxLives, Number(state.player.lives) || 0));
 
     // 오른쪽 위: 목숨 표시 (최대 목숨만큼 하트 슬롯 표시)
     // 화면이 좁아도 잘 보이도록 자동 줄바꿈
@@ -5120,6 +5135,8 @@ function drawMaze() {
     ctx.restore();
 }
 
+let rafId = null;
+
 function gameLoop(time) {
     const dt = time - state.lastTime;
     state.lastTime = time;
@@ -5129,8 +5146,38 @@ function gameLoop(time) {
     draw();
     // 텍스처 생성으로 인한 프레임 드랍을 줄이기 위해, 매 프레임 소량만 처리
     processMazeTexQueue(6);
-    requestAnimationFrame(gameLoop);
+    rafId = requestAnimationFrame(gameLoop);
 }
+
+// 메모리 누수 방지: 페이지 언로드 시 정리
+function cleanup() {
+    if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+    }
+    // 오디오 정리
+    if (state.audio?.wallRub?.el) {
+        try {
+            state.audio.wallRub.el.pause();
+            state.audio.wallRub.el.src = '';
+        } catch {}
+    }
+    if (state.audio?.bgm?.el) {
+        try {
+            state.audio.bgm.el.pause();
+            state.audio.bgm.el.src = '';
+        } catch {}
+    }
+    // 오디오 컨텍스트 정리
+    if (state.audio?.sfx?.ctx) {
+        try {
+            state.audio.sfx.ctx.close();
+        } catch {}
+    }
+}
+
+window.addEventListener('beforeunload', cleanup);
+window.addEventListener('pagehide', cleanup);
 
 init();
 updateUI();
