@@ -2361,6 +2361,8 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
         state.chaser.entryScheduledUntilMs = state.nowMs + 2000;
         state.chaser.respawnTimerMs = 3000; // 부활 전 3초 점멸 예고
         state.chaser.entryScheduledDir = 'RANDOM'; // 방향을 RANDOM으로 명시
+        // 경로 기반 시뮬레이션 리셋 (부활 시 경로 추적 초기화)
+        state.chaser.pathHistoryIndex = 0;
         
         // 무작위 위치 스폰 (가장자리 제외)
         const chunk = state.chunks.get(getChunkKey(x, y));
@@ -2682,6 +2684,8 @@ function resetAfterCaught() {
     state.chaser.pathIndex = 0;
     state.chaser.lastRepathMs = 0;
     state.chaser.lastTargetTile = null;
+    // 경로 기반 시뮬레이션 리셋 (플레이어가 잡혔으므로 경로 추적 초기화)
+    state.chaser.pathHistoryIndex = 0;
     state.chaser.graceUntilMs = state.nowMs + CONFIG.CHASER_GRACE_MS;
     state.chaser.isPresentInMaze = false;
     state.chaser.entryScheduledDir = state.currentEntryDir;
@@ -3296,8 +3300,8 @@ function updateChaser(dt) {
     // 살상 미사일에 의해 파괴된 경우 처리
     if (state.chaser.deadUntilNextChunk) return;
 
-    // 플레이어와 같은 청크에 있는지 확인
-    const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.chaser.chunk.y === state.currentChunk.y;
+    // 플레이어와 같은 청크에 있는지 확인 (먼저 선언)
+    const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.currentChunk.y === state.chaser.chunk.y;
     
     // 청크 진입 연출: 플레이어와 같은 청크에 있을 때만 입구 진입 연출 처리
     if (!state.chaser.isPresentInMaze && isPlayerInChaserChunk) {
@@ -3361,9 +3365,6 @@ function updateChaser(dt) {
     
     const maze = chunk.maze;
 
-    // 플레이어와 같은 청크에 있을 때만 미사일 발사 및 충돌 체크
-    const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.currentChunk.y === state.chaser.chunk.y;
-    
     // 20렙부터 레이저 발사 (같은 청크에 있을 때만)
     if (isPlayerInChaserChunk && getFloor() >= 20 && state.nowMs - state.chaser.lastShotMs > 5000) {
         state.chaser.lastShotMs = state.nowMs;
@@ -4179,6 +4180,8 @@ function onMissileHitTarget(m) {
             state.chaser.bossCooldownUntilMs = state.nowMs + 5000;
             // entryScheduledUntilMs가 과거로 남아있으면 즉시 등장하므로, 쿨다운 이후로 밀어둠
             state.chaser.entryScheduledUntilMs = state.chaser.bossCooldownUntilMs;
+            // 경로 기반 시뮬레이션 리셋 (보스 처치 후 추적자 상태 초기화)
+            state.chaser.pathHistoryIndex = 0;
 
             // 보스 클리어 후 다음 층(North)으로 자동 이동 예약
             const nextX = state.currentChunk.x;
@@ -4212,6 +4215,8 @@ function onMissileHitTarget(m) {
                 state.chaser.hp = 0;
                 state.chaser.isPresentInMaze = false;
                 state.chaser.deadUntilNextChunk = true;
+                // 경로 기반 시뮬레이션 리셋 (추적자 처치 후 경로 추적 초기화)
+                state.chaser.pathHistoryIndex = 0;
                 addScore(500, getFloor());
                 // 폭발 효과
                 fxBurstMaze(state.chaser.pos.x, state.chaser.pos.y, {
