@@ -4623,39 +4623,18 @@ function drawMaze() {
             ctx.translate(px, py);
             ctx.scale(scale, scale);
             
-            // 화려한 글로우 효과
-            ctx.shadowBlur = 25;
-            ctx.shadowColor = popup.isPositive 
-                ? 'rgba(255, 215, 0, 0.9)' 
-                : 'rgba(255, 50, 50, 0.9)';
-            
-            // 멋진 폰트
-            ctx.font = `bold ${28 * scale}px "Arial Black", Arial, sans-serif`;
+            // 단순한 폰트
+            ctx.font = `bold ${24 * scale}px Arial, sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
-            // 그라데이션
-            const gradient = ctx.createLinearGradient(-50, -15, 50, 15);
-            if (popup.isPositive) {
-                gradient.addColorStop(0, '#FFD700');
-                gradient.addColorStop(0.5, '#FFA500');
-                gradient.addColorStop(1, '#FF6347');
-            } else {
-                gradient.addColorStop(0, '#FF4444');
-                gradient.addColorStop(0.5, '#CC0000');
-                gradient.addColorStop(1, '#990000');
-            }
-            ctx.fillStyle = gradient;
+            // 단순한 색상 (그라데이션 제거)
+            ctx.fillStyle = popup.isPositive ? '#FFD700' : '#FF4444';
             
-            // 외곽선
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-            ctx.lineWidth = 4;
+            // 얇은 외곽선
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.lineWidth = 2;
             ctx.strokeText(popup.value, 0, 0);
-            ctx.fillText(popup.value, 0, 0);
-            
-            // 추가 파티클 효과 (글로우)
-            ctx.shadowBlur = 40;
-            ctx.globalAlpha = alpha * 0.3;
             ctx.fillText(popup.value, 0, 0);
             
             ctx.restore();
