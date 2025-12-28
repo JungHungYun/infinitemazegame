@@ -5083,6 +5083,82 @@ function drawMaze() {
         }
     }
 
+    // 출구 바닥 타일 오버레이 (이미 방문한 청크: 빨간색, 10층 진입: 파란색)
+    ctx.save();
+    const currentFloor = state.currentChunk.y + 1;
+    const overlayAlpha = 0.4; // 투명도
+    
+    // 북쪽 출구 바닥 타일 (y=0, x=중앙)
+    {
+        const nextX = state.currentChunk.x;
+        const nextY = state.currentChunk.y + 1;
+        const key = getChunkKey(nextX, nextY);
+        const isVisited = state.visitedChunks.has(key);
+        const isFloor10 = (currentFloor === 9 && nextY + 1 === 10);
+        
+        if (isVisited || isFloor10) {
+            const midX = Math.floor(CONFIG.MAZE_SIZE / 2);
+            const tileX = offsetX + midX * cellSize;
+            const tileY = offsetY + 0 * cellSize;
+            
+            ctx.fillStyle = isVisited ? `rgba(255, 68, 68, ${overlayAlpha})` : `rgba(68, 136, 255, ${overlayAlpha})`;
+            ctx.fillRect(tileX, tileY, cellSize, cellSize);
+        }
+    }
+    
+    // 남쪽 출구 바닥 타일 (y=MAZE_SIZE-1, x=중앙)
+    if (state.currentChunk.y > 0) {
+        const nextX = state.currentChunk.x;
+        const nextY = state.currentChunk.y - 1;
+        const key = getChunkKey(nextX, nextY);
+        const isVisited = state.visitedChunks.has(key);
+        
+        if (isVisited) {
+            const midX = Math.floor(CONFIG.MAZE_SIZE / 2);
+            const tileX = offsetX + midX * cellSize;
+            const tileY = offsetY + (CONFIG.MAZE_SIZE - 1) * cellSize;
+            
+            ctx.fillStyle = `rgba(255, 68, 68, ${overlayAlpha})`;
+            ctx.fillRect(tileX, tileY, cellSize, cellSize);
+        }
+    }
+    
+    // 서쪽 출구 바닥 타일 (x=0, y=중앙)
+    if (state.currentChunk.x > 0) {
+        const nextX = state.currentChunk.x - 1;
+        const nextY = state.currentChunk.y;
+        const key = getChunkKey(nextX, nextY);
+        const isVisited = state.visitedChunks.has(key);
+        
+        if (isVisited) {
+            const midY = Math.floor(CONFIG.MAZE_SIZE / 2);
+            const tileX = offsetX + 0 * cellSize;
+            const tileY = offsetY + midY * cellSize;
+            
+            ctx.fillStyle = `rgba(255, 68, 68, ${overlayAlpha})`;
+            ctx.fillRect(tileX, tileY, cellSize, cellSize);
+        }
+    }
+    
+    // 동쪽 출구 바닥 타일 (x=MAZE_SIZE-1, y=중앙)
+    if (state.currentChunk.x < CONFIG.CHUNK_COLS - 1) {
+        const nextX = state.currentChunk.x + 1;
+        const nextY = state.currentChunk.y;
+        const key = getChunkKey(nextX, nextY);
+        const isVisited = state.visitedChunks.has(key);
+        
+        if (isVisited) {
+            const midY = Math.floor(CONFIG.MAZE_SIZE / 2);
+            const tileX = offsetX + (CONFIG.MAZE_SIZE - 1) * cellSize;
+            const tileY = offsetY + midY * cellSize;
+            
+            ctx.fillStyle = `rgba(255, 68, 68, ${overlayAlpha})`;
+            ctx.fillRect(tileX, tileY, cellSize, cellSize);
+        }
+    }
+    
+    ctx.restore();
+
     // 보스 피격 혈흔(바닥 데칼) - 벽 위/파티클 아래 레이어
     if (state.fx?.bloodSplats?.length) {
         ctx.save();
