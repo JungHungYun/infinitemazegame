@@ -59,11 +59,21 @@ async function ensureProfileFromUser(user, usernameFromInput = '') {
     await upsertProfile(user.id, name);
 }
 
+function toggleAuthInputs(show) {
+    const emailEl = document.getElementById('auth-email');
+    const pwEl = document.getElementById('auth-password');
+    const nameEl = document.getElementById('auth-username');
+    if (emailEl) emailEl.style.display = show ? '' : 'none';
+    if (pwEl) pwEl.style.display = show ? '' : 'none';
+    if (nameEl) nameEl.style.display = show ? '' : 'none';
+}
+
 async function refreshAuthUI() {
     const sb = window.supabaseClient;
     if (!sb) {
         setAuthStatus('Supabase 미설정: URL/anon key를 넣어주세요.');
         toggleAuthButtons(false);
+        toggleAuthInputs(true);
         return;
     }
     const { data } = await sb.auth.getUser();
@@ -74,9 +84,13 @@ async function refreshAuthUI() {
         toggleAuthButtons(true);
         // 로그인 상태에서는 입력값을 남겨둘 이유가 없으므로 정리
         clearAuthInputs();
+        // 로그인 후 텍스트 박스 숨기기
+        toggleAuthInputs(false);
     } else {
         setAuthStatus('로그인하면 점수가 리더보드에 기록됩니다.');
         toggleAuthButtons(false);
+        // 로그아웃 시 텍스트 박스 다시 보이기
+        toggleAuthInputs(true);
     }
 }
 
