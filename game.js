@@ -3266,25 +3266,35 @@ function updateChaser(dt) {
     if (state.chaser.deadUntilNextChunk) return;
 
     // 청크 진입 연출: 아직 등장 시간이 아니면 아예 미존재 처리
-    if (!state.chaser.isPresentInMaze) {
-        if (state.chaser.entryScheduledUntilMs && state.nowMs >= state.chaser.entryScheduledUntilMs) {
-            const dir = state.chaser.entryScheduledDir || state.currentEntryDir || 'S';
-            
-            // 리스폰 타이머(3초 점멸 예고) 체크
-            if (state.chaser.respawnTimerMs > 0) {
-                state.chaser.respawnTimerMs -= dt;
-                if (state.chaser.respawnTimerMs <= 0) {
+    // 단, 추적자가 다른 청크에 있고 플레이어와 다른 청크에 있을 때는 계속 이동해야 하므로
+    // 출구 도달 체크는 항상 수행
+    const isChaserWaitingToAppear = !state.chaser.isPresentInMaze;
+    const isChaserInDifferentChunk = state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y;
+    
+    if (isChaserWaitingToAppear) {
+        // 추적자가 다른 청크에 있으면 출구 도달 체크를 위해 계속 진행
+        // (플레이어와 같은 청크에 있을 때만 등장 대기)
+        if (!isChaserInDifferentChunk) {
+            if (state.chaser.entryScheduledUntilMs && state.nowMs >= state.chaser.entryScheduledUntilMs) {
+                const dir = state.chaser.entryScheduledDir || state.currentEntryDir || 'S';
+                
+                // 리스폰 타이머(3초 점멸 예고) 체크
+                if (state.chaser.respawnTimerMs > 0) {
+                    state.chaser.respawnTimerMs -= dt;
+                    if (state.chaser.respawnTimerMs <= 0) {
+                        materializeChaserIntoPlayerChunk(dir);
+                        updateUI();
+                    }
+                    return;
+                } else {
                     materializeChaserIntoPlayerChunk(dir);
                     updateUI();
                 }
-                return;
             } else {
-                materializeChaserIntoPlayerChunk(dir);
-                updateUI();
+                return;
             }
-        } else {
-            return;
         }
+        // 추적자가 다른 청크에 있으면 isPresentInMaze가 false여도 계속 진행 (출구 도달 체크를 위해)
     }
 
     // 플레이어와 같은 청크에 있을 때만 미사일 발사 및 충돌 체크
