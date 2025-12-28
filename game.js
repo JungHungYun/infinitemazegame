@@ -3419,7 +3419,7 @@ function updateChaser(dt) {
         }
     }
     
-    // 추격자가 청크 경계(출구)에 도달하면 플레이어가 있는 청크의 입구로 스폰
+    // 추격자가 청크 경계(출구)에 도달하면 출구 방향의 인접 청크로 이동
     const size = CONFIG.MAZE_SIZE;
     const margin = 0.3; // 경계 근처 판정 마진
     let exitDir = null;
@@ -3430,27 +3430,48 @@ function updateChaser(dt) {
     else if (state.chaser.pos.y < margin) exitDir = 'S'; // 남쪽 출구
     else if (state.chaser.pos.y > size - margin) exitDir = 'N'; // 북쪽 출구
     
-    // 추격자가 출구에 도달했고, 플레이어와 다른 청크에 있으면 플레이어 청크로 이동
-    if (exitDir && !isPlayerInChaserChunkForPath) {
-        const dx = state.currentChunk.x - state.chaser.chunk.x;
-        const dy = state.currentChunk.y - state.chaser.chunk.y;
+    // 추격자가 출구에 도달했으면 출구 방향의 인접 청크로 이동
+    if (exitDir) {
+        // 출구 방향에 따라 다음 청크 좌표 계산
+        let nextChunkX = state.chaser.chunk.x;
+        let nextChunkY = state.chaser.chunk.y;
+        let entryDir = 'S'; // 기본값
         
-        // 추격자가 경계에 도달했고 플레이어와 다른 청크에 있으면 무조건 이동
-        // (출구 방향과 플레이어 방향이 일치하는지 확인하지 않고 바로 이동)
-        if (dx !== 0 || dy !== 0) {
-            // 추격자가 플레이어 청크로 이동
-            state.chaser.chunk.x = state.currentChunk.x;
-            state.chaser.chunk.y = state.currentChunk.y;
+        if (exitDir === 'W') {
+            // 서쪽 출구로 나감 → 서쪽 인접 청크로 이동 → 동쪽 입구에 스폰
+            nextChunkX = state.chaser.chunk.x - 1;
+            entryDir = 'E';
+        } else if (exitDir === 'E') {
+            // 동쪽 출구로 나감 → 동쪽 인접 청크로 이동 → 서쪽 입구에 스폰
+            nextChunkX = state.chaser.chunk.x + 1;
+            entryDir = 'W';
+        } else if (exitDir === 'S') {
+            // 남쪽 출구로 나감 → 남쪽 인접 청크로 이동 → 북쪽 입구에 스폰
+            nextChunkY = state.chaser.chunk.y - 1;
+            entryDir = 'N';
+        } else if (exitDir === 'N') {
+            // 북쪽 출구로 나감 → 북쪽 인접 청크로 이동 → 남쪽 입구에 스폰
+            nextChunkY = state.chaser.chunk.y + 1;
+            entryDir = 'S';
+        }
+        
+        // 청크 경계 체크 (유효한 청크인지 확인)
+        const isValidChunk = 
+            nextChunkX >= 0 && nextChunkX < CONFIG.CHUNK_COLS &&
+            nextChunkY >= 0; // y는 음수 불가
+        
+        if (isValidChunk) {
+            // 다음 청크가 없으면 생성
+            const nextChunkKey = getChunkKey(nextChunkX, nextChunkY);
+            if (!state.chunks.has(nextChunkKey)) {
+                state.chunks.set(nextChunkKey, new Chunk(nextChunkX, nextChunkY));
+            }
             
-            // 플레이어가 들어온 입구의 반대편에서 스폰
-            // 예: 플레이어가 북쪽으로 나갔으면 (dy=1), 추적자는 남쪽 입구에서 들어옴
-            let entryDir = 'S'; // 기본값
-            if (dx < 0) entryDir = 'E'; // 플레이어가 서쪽으로 나감 -> 추적자는 동쪽에서 들어옴
-            else if (dx > 0) entryDir = 'W'; // 플레이어가 동쪽으로 나감 -> 추적자는 서쪽에서 들어옴
-            else if (dy < 0) entryDir = 'N'; // 플레이어가 남쪽으로 나감 -> 추적자는 북쪽에서 들어옴
-            else if (dy > 0) entryDir = 'S'; // 플레이어가 북쪽으로 나감 -> 추적자는 남쪽에서 들어옴
+            // 추격자를 다음 청크로 이동
+            state.chaser.chunk.x = nextChunkX;
+            state.chaser.chunk.y = nextChunkY;
             
-            // 입구 위치로 스폰
+            // 반대편 입구 위치로 스폰
             const entryPos = getSpawnPosForEntry(entryDir);
             state.chaser.pos = { ...entryPos };
             
@@ -3465,6 +3486,10 @@ function updateChaser(dt) {
             state.chaser.pathIndex = 0;
             state.chaser.lastRepathMs = 0;
             state.chaser.lastTargetTile = null;
+        } else {
+            // 유효하지 않은 청크면 경계에 멈춤
+            state.chaser.pos.x = Math.max(margin, Math.min(size - margin, state.chaser.pos.x));
+            state.chaser.pos.y = Math.max(margin, Math.min(size - margin, state.chaser.pos.y));
         }
     }
 }
