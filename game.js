@@ -989,9 +989,9 @@ function buildChunkMazeTexture(chunk) {
                     // 바닥 이미지 무작위 선택 (청크마다 다른 패턴, 더 무작위)
                     // mulberry32 RNG를 사용하여 더 자연스러운 무작위 배치
                     const groundRng = mulberry32(hashStringToUint(`ground:${chunk.x},${chunk.y},${x},${y}`));
-                    const groundIdx = Math.floor(groundRng() * GROUND_IMGS.length);
+                    const groundIdx = Math.min(Math.floor(groundRng() * GROUND_IMGS.length), GROUND_IMGS.length - 1);
                     const groundImg = GROUND_IMGS[groundIdx];
-                    if (groundImg.complete && groundImg.naturalWidth > 0) {
+                    if (groundImg && groundImg.complete && groundImg.naturalWidth > 0) {
                         g.drawImage(groundImg, px, py, tile, tile);
                     } else {
                         // 이미지가 로드되지 않았으면 폴백
