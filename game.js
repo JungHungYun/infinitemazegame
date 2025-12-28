@@ -2015,6 +2015,9 @@ function restartRun() {
     state.ui.bossKills = 0;
     state.ui.scoreDisplayY = 30;
     state.ui.lastScore = 0;
+    
+    // 방문한 청크 초기화
+    state.visitedChunks.clear();
 
             updateUI();
 }
