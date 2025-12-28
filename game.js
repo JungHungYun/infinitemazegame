@@ -2388,15 +2388,20 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
                 if (state.chaser.isPresentInMaze) {
                     // 추격자가 이미 청크에 있으므로 입구 진입 예약하지 않음
                     // 추격자는 계속 이동 중인 상태로 유지됨
+                    // 경로 기반 시뮬레이션 인덱스 리셋 (플레이어와 같은 청크에 있으므로)
+                    state.chaser.pathHistoryIndex = 0;
                 } else {
                     // 추격자가 이 청크에 있지만 아직 등장하지 않았으면 입구 진입 예약
                     // 부활 예약('RANDOM')이 아닌 경우에만 입구 진입 예약
                     if (state.chaser.entryScheduledDir !== 'RANDOM') {
                         scheduleChaserEntryIntoPlayerChunk(entryDir);
                     }
+                    // 경로 기반 시뮬레이션 인덱스 리셋
+                    state.chaser.pathHistoryIndex = 0;
                 }
             } else {
                 // 추격자가 다른 청크에 있으면 입구 진입 예약하지 않음 (이전 청크에서 계속 활동)
+                // 경로 기반 시뮬레이션은 계속 진행됨
             }
         }
     }
@@ -3426,8 +3431,26 @@ function updateChaser(dt) {
     const pathHistory = state.player.pathHistory || [];
     const pathIndex = state.chaser.pathHistoryIndex || 0;
     
+    // 추적자가 플레이어와 같은 청크에 도달했는지 확인
+    // (경로를 따라가다가 플레이어 청크에 도달한 경우)
     if (pathIndex >= pathHistory.length) {
-        // 경로가 없으면 대기
+        // 경로가 끝났으면 플레이어와 같은 청크에 도달한 것
+        // 추적자를 플레이어 청크로 이동시키고 직접 추적 모드로 전환
+        if (state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y) {
+            state.chaser.chunk.x = state.currentChunk.x;
+            state.chaser.chunk.y = state.currentChunk.y;
+            // 플레이어 청크의 입구로 스폰 (현재 입구 방향 사용)
+            const entryPos = getSpawnPosForEntry(state.currentEntryDir || 'S');
+            state.chaser.pos = { ...entryPos };
+            state.chaser.isPresentInMaze = false; // 입구 진입 연출을 위해
+            state.chaser.entryScheduledDir = state.currentEntryDir || 'S';
+            state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
+            state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
+            state.chaser.path = [];
+            state.chaser.pathIndex = 0;
+            state.chaser.lastRepathMs = 0;
+            state.chaser.lastTargetTile = null;
+        }
         return;
     }
     
@@ -3519,12 +3542,9 @@ function updateChaser(dt) {
     
     // 출구에 도달했고, 출구 방향이 경로의 exitDir과 일치하면 다음 경로로 이동
     if (exitDir && exitDir === currentPath.exitDir) {
-        // 다음 경로로 이동
-        state.chaser.pathHistoryIndex = pathIndex + 1;
-        
         // 통과한 경로 항목 제거 (메모리 절약)
         state.player.pathHistory.splice(0, pathIndex + 1);
-        // 인덱스 조정 (배열이 줄어들었으므로)
+        // 인덱스 리셋 (배열이 줄어들었으므로)
         state.chaser.pathHistoryIndex = 0;
         
         // 다음 경로가 있으면 해당 청크로 이동
@@ -3534,10 +3554,14 @@ function updateChaser(dt) {
             state.chaser.chunk.y = nextPath.chunk.y;
             const entryPos = getSpawnPosForEntry(nextPath.entryDir);
             state.chaser.pos = { ...entryPos };
+            state.chaser.isPresentInMaze = true; // 시뮬레이션 중이므로 항상 표시
             state.chaser.path = [];
             state.chaser.pathIndex = 0;
             state.chaser.lastRepathMs = 0;
             state.chaser.lastTargetTile = null;
+        } else {
+            // 경로가 끝났으면 플레이어와 같은 청크에 도달한 것
+            // 다음 프레임에서 플레이어 청크로 이동 처리됨
         }
     }
 }
