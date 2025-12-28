@@ -4280,8 +4280,14 @@ function checkExits() {
     // 중심 좌표 기준: 유효 영역은 (0~size)이며 타일 중심은 0.5~size-0.5
     if (p.y < 0) exitMaze(0, 1); // North (Y 증가가 북쪽)
     else if (p.y > CONFIG.MAZE_SIZE) {
-        // 남쪽으로 이동 가능 (아래로 진행)
-        exitMaze(0, -1);
+        // 1층에서는 아래로 이동 불가
+        const floor = getFloor();
+        if (floor === 1) {
+            state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
+        } else {
+            // 남쪽으로 이동 가능 (아래로 진행)
+            exitMaze(0, -1);
+        }
     }
     else if (p.x < 0) {
         // 맨 왼쪽 청크는 서쪽 막힘
