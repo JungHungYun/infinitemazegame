@@ -17,6 +17,39 @@ function ensureWallRubAudioElement() {
     try { el.mozPreservesPitch = false; } catch { /* ignore */ }
     try { el.webkitPreservesPitch = false; } catch { /* ignore */ }
 
+    // 모바일 최적화: timeupdate 이벤트로 더 정확한 루프 처리
+    el.addEventListener('timeupdate', () => {
+        if (!wr.playing) return;
+        const dur = el.duration;
+        const pad = Math.max(0, wr.tailSkipSec || 0);
+        if (Number.isFinite(dur) && dur > pad + 0.1) {
+            const loopEnd = dur - pad;
+            const currentTime = el.currentTime || 0;
+            // 모바일: 끝부분에 가까워지면 미리 되감기
+            if (currentTime >= loopEnd - 0.15) {
+                try {
+                    el.currentTime = 0;
+                    // 재생이 멈췄을 수 있으므로 재생 확인
+                    if (el.paused) {
+                        const p = el.play();
+                        if (p && typeof p.catch === 'function') p.catch(() => {});
+                    }
+                } catch {}
+            }
+        }
+    }, { passive: true });
+
+    // 모바일 최적화: ended 이벤트로 재생이 끝났을 때 즉시 재시작
+    el.addEventListener('ended', () => {
+        if (wr.playing) {
+            try {
+                el.currentTime = 0;
+                const p = el.play();
+                if (p && typeof p.catch === 'function') p.catch(() => {});
+            } catch {}
+        }
+    }, { passive: true });
+
     // 디버깅에 도움되는 에러 로그(문제 발생 시 콘솔에서 원인 확인 가능)
     el.addEventListener('error', () => {
         try { console.warn('[wallRub] audio error', el.error, wr.src); } catch { /* ignore */ }
@@ -381,6 +414,12 @@ function tickWallRubAudio(nowMs) {
     const el = wr.el;
     if (!el) return;
 
+    // 모바일 최적화: 재생 중인데 pause된 상태면 즉시 재생 시도
+    if (wr.playing && el.paused) {
+        const p = el.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
+
     // 피치(=playbackRate) 스무딩 적용
     const s = Math.max(0, Math.min(1, wr.rateSmoothing ?? 0.18));
     wr.rateCurrent = (wr.rateCurrent ?? 1) + ((wr.rateTarget ?? 1) - (wr.rateCurrent ?? 1)) * s;
@@ -390,13 +429,22 @@ function tickWallRubAudio(nowMs) {
     }
 
     // 루프 구간 제어: 마지막 2초(tailSkipSec)는 사용하지 않음
+    // 모바일 최적화: 더 일찍 루프를 시작하여 끊김 방지
     const dur = el.duration;
     const pad = Math.max(0, wr.tailSkipSec || 0);
     if (wr.playing && Number.isFinite(dur) && dur > pad + 0.1) {
         const loopEnd = dur - pad;
-        // 끝부분에 닿으면 0으로 되감아 반복
-        if (el.currentTime >= loopEnd) {
-            try { el.currentTime = 0; } catch { /* ignore */ }
+        const currentTime = el.currentTime || 0;
+        // 모바일: 끝부분에 가까워지면 미리 되감기 (0.1초 여유)
+        if (currentTime >= loopEnd - 0.1) {
+            try { 
+                el.currentTime = 0;
+                // 모바일: 되감은 후 재생이 멈췄을 수 있으므로 재생 확인
+                if (el.paused && wr.playing) {
+                    const p = el.play();
+                    if (p && typeof p.catch === 'function') p.catch(() => {});
+                }
+            } catch { /* ignore */ }
         }
     }
 
