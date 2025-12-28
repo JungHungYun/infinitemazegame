@@ -5427,8 +5427,9 @@ function drawMaze() {
         }
     }
 
-    // 추격자 (미로 내부)
-    if (state.chaser.active && state.chaser.isPresentInMaze && !state.boss.active && !state.chaser.deadUntilNextChunk) {
+    // 추격자 (미로 내부) - 플레이어와 같은 청크에 있을 때만 렌더링
+    const isChaserInPlayerChunk = state.chaser.chunk.x === state.currentChunk.x && state.chaser.chunk.y === state.currentChunk.y;
+    if (state.chaser.active && state.chaser.isPresentInMaze && isChaserInPlayerChunk && !state.boss.active && !state.chaser.deadUntilNextChunk) {
         const cX = offsetX + state.chaser.pos.x * cellSize;
         const cY = offsetY + state.chaser.pos.y * cellSize;
         
