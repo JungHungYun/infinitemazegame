@@ -2993,7 +2993,7 @@ function updateBoss(dt) {
             if (!laserSoundGroups.has(groupKey)) {
                 laserSoundGroups.set(groupKey, true);
                 laser.soundPlayed = true;
-                playSfx('resource/laser.mp3', { volume: 0.8, rate: 1.0 });
+                playSfx('resource/laser-381976.mp3', { volume: 0.8, rate: 1.0 });
             } else {
                 laser.soundPlayed = true; // 이미 재생되었으므로 표시만
             }
