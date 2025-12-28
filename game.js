@@ -10,6 +10,10 @@ const CHASER_IMG = new Image();
 const MISSILE_IMG = new Image();         // 플레이어 미사일
 const CHASER_MISSILE_IMG = new Image();  // 추격자 미사일
 const BOSS_IMG = new Image();            // 보스 이미지
+// 코인 애니메이션 이미지
+const COIN_FRONT_IMG = new Image();
+const COIN_45_IMG = new Image();
+const COIN_SIDE_IMG = new Image();
 
 function loadImageWithDebug(img, url, label) {
     return new Promise((resolve, reject) => {
@@ -53,6 +57,9 @@ async function preloadGameImages() {
             loadImageWithDebug(MISSILE_IMG, 'resource/imgage/misslie.png', '플레이어 미사일 이미지'),
             loadImageWithDebug(CHASER_MISSILE_IMG, 'resource/imgage/chaser_misslie.png', '추격자 미사일 이미지'),
             loadImageWithDebug(BOSS_IMG, 'resource/imgage/boss.png', '보스 이미지'),
+            loadImageWithDebug(COIN_FRONT_IMG, 'resource/imgage/coin_front.png', '코인 앞면 이미지'),
+            loadImageWithDebug(COIN_45_IMG, 'resource/imgage/coin_45.png', '코인 45도 이미지'),
+            loadImageWithDebug(COIN_SIDE_IMG, 'resource/imgage/coin_side.png', '코인 옆면 이미지'),
         ]);
         GAME_IMG_READY = true;
         GAME_IMG_ERROR = '';
@@ -5384,7 +5391,7 @@ function drawMaze() {
         }
     }
 
-    // 코인 렌더(픽셀 블록 느낌)
+    // 코인 렌더(애니메이션)
     if (chunk.coins?.length) {
         for (const c of chunk.coins) {
             if (c.picked) continue;
@@ -5392,18 +5399,53 @@ function drawMaze() {
             const y = offsetY + c.y * cellSize;
             const bob = Math.sin((state.nowMs + c.x * 1000) * 0.006) * (cellSize * 0.04);
             const s = cellSize * 0.16;
+            
+            // 코인 애니메이션: coin_front -> coin_45 -> coin_side -> coin_45(좌우반전) -> coin_front 반복
+            // 각 프레임당 약 150ms (총 600ms 사이클)
+            const animSpeed = 150; // ms per frame
+            const animTime = (state.nowMs + c.x * 1000) % (animSpeed * 4);
+            const frame = Math.floor(animTime / animSpeed);
+            
+            let coinImg = null;
+            let flipX = false;
+            
+            if (frame === 0) {
+                coinImg = COIN_FRONT_IMG;
+            } else if (frame === 1) {
+                coinImg = COIN_45_IMG;
+            } else if (frame === 2) {
+                coinImg = COIN_SIDE_IMG;
+            } else if (frame === 3) {
+                coinImg = COIN_45_IMG;
+                flipX = true; // 좌우 반전
+            }
+            
             ctx.save();
             ctx.translate(x, y + bob);
-            // 픽셀 느낌: smoothing OFF
-            ctx.imageSmoothingEnabled = false;
-            ctx.fillStyle = 'rgba(255, 210, 77, 0.95)';
-            ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-            ctx.lineWidth = 2;
-            ctx.fillRect(-s / 2, -s / 2, s, s);
-            ctx.strokeRect(-s / 2 + 0.5, -s / 2 + 0.5, s - 1, s - 1);
-            // 반짝 하이라이트 픽셀
-            ctx.fillStyle = 'rgba(255,255,255,0.65)';
-            ctx.fillRect(-s / 2 + 2, -s / 2 + 2, 3, 3);
+            
+            // 이미지가 로드되었는지 확인
+            const imgReady = coinImg && coinImg.complete && coinImg.naturalWidth > 0;
+            
+            if (imgReady) {
+                ctx.imageSmoothingEnabled = true;
+                if (flipX) {
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(coinImg, -s / 2, -s / 2, s, s);
+                } else {
+                    ctx.drawImage(coinImg, -s / 2, -s / 2, s, s);
+                }
+            } else {
+                // 폴백: 이미지가 로드되지 않았을 때 기존 픽셀 블록 렌더링
+                ctx.imageSmoothingEnabled = false;
+                ctx.fillStyle = 'rgba(255, 210, 77, 0.95)';
+                ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+                ctx.lineWidth = 2;
+                ctx.fillRect(-s / 2, -s / 2, s, s);
+                ctx.strokeRect(-s / 2 + 0.5, -s / 2 + 0.5, s - 1, s - 1);
+                ctx.fillStyle = 'rgba(255,255,255,0.65)';
+                ctx.fillRect(-s / 2 + 2, -s / 2 + 2, 3, 3);
+            }
+            
             ctx.restore();
         }
     }
