@@ -2634,9 +2634,11 @@ function resetAfterCaught() {
         fxFlash(0.3);
         fxShake(3.0);
         updateUI();
+        // 라이프가 0이면 게임오버
+        if (state.player.lives <= 0 && !state.ui.gameOverOpen) {
+            openGameOverModal();
+        }
     }
-    // 라이프가 0이면 게임오버로 넘어가므로 더 이상 로직 진행하지 않음
-    if (state.ui.gameOverOpen || (state.player.lives || 0) <= 0) return;
 }
 
 function findNearestOpenCell(maze, sx, sy) {
