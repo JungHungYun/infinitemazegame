@@ -980,8 +980,10 @@ function buildChunkMazeTexture(chunk) {
                         g.restore();
                     }
                 } else {
-                    // 바닥 이미지 랜덤 선택
-                    const groundIdx = (x * 31 + y * 17) % GROUND_IMGS.length;
+                    // 바닥 이미지 랜덤 선택 (청크마다 다른 패턴)
+                    // 청크 좌표를 시드로 사용하여 청크마다 다른 배치
+                    const chunkSeed = hashStringToUint(`ground:${chunk.x},${chunk.y}`);
+                    const groundIdx = ((x * 31 + y * 17) ^ chunkSeed) % GROUND_IMGS.length;
                     const groundImg = GROUND_IMGS[groundIdx];
                     if (groundImg.complete && groundImg.naturalWidth > 0) {
                         g.drawImage(groundImg, px, py, tile, tile);
