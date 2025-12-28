@@ -1987,6 +1987,7 @@ function restartRun() {
         deadUntilNextChunk: false,
         respawnTimerMs: 0,
         bossCooldownUntilMs: 0,
+        caughtUntilMs: 0, // 잡힌 후 2초 동안 멈춤 상태
         hp: CONFIG.MISSILE_DAMAGE * 5,
         maxHp: CONFIG.MISSILE_DAMAGE * 5,
     };
@@ -2621,34 +2622,21 @@ function materializeChaserIntoPlayerChunk(entryDir) {
 }
 
 function resetAfterCaught() {
-    // 추격자에게 "잡힘" 판정으로 리셋될 때 하트가 안 깎이던 버그 수정
-    // 이미 다른 충돌 분기에서 데미지를 받은 직후라면 graceUntilMs로 중복 감소를 방지
-    if (state.nowMs > (state.chaser.graceUntilMs || 0)) {
-        // 실드가 있으면 1회 피격 무효 + 1초 무적
-        applyPlayerHit({ livesLoss: 1, canUseShield: true, flashA: 0, shake: 0 });
+    // 추격자에게 "잡힘" 판정: 리스폰하지 않고 2초 동안 멈춤
+    // 이미 다른 충돌 분기에서 데미지를 받은 직후라면 중복 감소를 방지
+    if (state.nowMs > (state.chaser.graceUntilMs || 0) && state.nowMs > (state.chaser.caughtUntilMs || 0)) {
+        // 하트만 소모 (대미지는 들어가지 않음, 무적 시간도 설정하지 않음)
+        state.player.lives = Math.max(0, (state.player.lives || 0) - 1);
+        state.chaser.caughtCount += 1;
+        // 2초 동안 추적자 멈춤
+        state.chaser.caughtUntilMs = state.nowMs + 2000;
+        // 플레이어는 무적 시간 없이 이동 가능 (추적자만 멈춤)
+        fxFlash(0.3);
+        fxShake(3.0);
+        updateUI();
     }
-    // 라이프가 0이면 게임오버로 넘어가므로 더 이상 리셋 로직 진행하지 않음
+    // 라이프가 0이면 게임오버로 넘어가므로 더 이상 로직 진행하지 않음
     if (state.ui.gameOverOpen || (state.player.lives || 0) <= 0) return;
-
-    // 현재 청크 입구로 플레이어 리셋
-    state.player.mazePos = getSpawnPosForEntry(state.currentEntryDir);
-    // 추격자는 리셋 후 잠깐 유예(속도는 유지)
-    state.chaser.chunk = { x: state.currentChunk.x, y: state.currentChunk.y };
-    state.chaser.pos = getSpawnPosForEntry(oppositeDir(state.currentEntryDir));
-    state.chaser.path = [];
-    state.chaser.pathIndex = 0;
-    state.chaser.lastRepathMs = 0;
-    state.chaser.lastTargetTile = null;
-    state.chaser.graceUntilMs = state.nowMs + CONFIG.CHASER_GRACE_MS;
-    state.chaser.isPresentInMaze = false;
-    state.chaser.entryScheduledDir = state.currentEntryDir;
-    state.chaser.entryScheduledPos = null;
-    state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
-    state.chaser.caughtCount += 1;
-
-    fxFlash(0.4);
-    fxShake(3.5);
-    updateUI();
 }
 
 function findNearestOpenCell(maze, sx, sy) {
@@ -3303,9 +3291,10 @@ function updateChaser(dt) {
         }
     }
 
-    // 스턴/유예 시간 동안은 추격자 정지
+    // 스턴/유예/잡힘 시간 동안은 추격자 정지
     if (state.nowMs < state.chaser.stunUntilMs) return;
     if (state.nowMs < state.chaser.graceUntilMs) return;
+    if (state.nowMs < state.chaser.caughtUntilMs) return; // 잡힌 후 2초 동안 멈춤
 
     const dtSec = Math.min(dt, 50) / 1000;
     let speed = CONFIG.CHASER_SPEED * state.chaser.speedMult;
