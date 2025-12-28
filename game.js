@@ -112,8 +112,6 @@ const state = {
         lives: 3,
         invincibleUntilMs: 0, // 플레이어 무적 시간
         shieldCharges: 0, // 실드 잔량(피격 1회 무효)
-        // 플레이어가 지나온 청크 경로 기록 (추적자가 따라갈 경로)
-        pathHistory: [], // [{ chunk: {x, y}, entryDir: 'N'|'S'|'E'|'W', exitDir: 'N'|'S'|'E'|'W', enteredAt: timestamp }]
     },
     input: {
         pointerDown: false,
@@ -190,8 +188,6 @@ const state = {
         // 추격자 체력 (미사일 기본 공격력의 5배)
         hp: CONFIG.MISSILE_DAMAGE * 5,
         maxHp: CONFIG.MISSILE_DAMAGE * 5,
-        // 경로 기반 시뮬레이션: 플레이어 경로를 따라가는 인덱스
-        pathHistoryIndex: 0, // state.player.pathHistory의 인덱스
     },
     chaserProjectiles: [], // {pos, vel}
 
@@ -985,7 +981,7 @@ function buildChunkMazeTexture(chunk) {
                         g.shadowOffsetX = 2;
                         g.shadowOffsetY = 2;
                         // 명도 감소 (더 어둡게)
-                        g.globalAlpha = 0.4; // 명도 50% 감소
+                        g.globalAlpha = 0.5; // 명도 50% 감소
                         g.drawImage(WALL_IMG, px, py, tile, tile);
                         g.restore();
                     }
@@ -1992,12 +1988,7 @@ function restartRun() {
         bossCooldownUntilMs: 0,
         hp: CONFIG.MISSILE_DAMAGE * 5,
         maxHp: CONFIG.MISSILE_DAMAGE * 5,
-        // 경로 기반 시뮬레이션: 플레이어 경로를 따라가는 인덱스
-        pathHistoryIndex: 0, // state.player.pathHistory의 인덱스
     };
-    
-    // 플레이어 경로 기록 초기화
-    state.player.pathHistory = [];
 
     // 청크/카메라/입구 초기화
     state.chunks = new Map();
@@ -2023,10 +2014,6 @@ function restartRun() {
     state.ui.bossKills = 0;
     state.ui.scoreDisplayY = 30;
     state.ui.lastScore = 0;
-    
-    // 플레이어 경로 기록 초기화
-    state.player.pathHistory = [];
-    state.chaser.pathHistoryIndex = 0;
 
             updateUI();
 }
@@ -2075,13 +2062,13 @@ function resize() {
 
 function generateVisibleChunks() {
     const viewDist = 5;
-    // 시작 지점(2,0) 아래(음수 y)로는 필요 없으므로 생성 금지
-    const startY = Math.max(0, state.player.worldPos.y - viewDist);
+    // 아래(음수 y)로도 이동 가능하므로 제한 제거
+    const startY = state.player.worldPos.y - viewDist;
     const endY = state.player.worldPos.y + viewDist;
 
     // 메모리 누수 방지: 보이지 않는 청크 제거
     const keepDist = viewDist + 2; // 보이는 거리보다 조금 더 유지
-    const keepStartY = Math.max(0, state.player.worldPos.y - keepDist);
+    const keepStartY = state.player.worldPos.y - keepDist;
     const keepEndY = state.player.worldPos.y + keepDist;
     
     // 오래된 청크 제거 (메모리 누수 방지)
@@ -2361,8 +2348,6 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
         state.chaser.entryScheduledUntilMs = state.nowMs + 2000;
         state.chaser.respawnTimerMs = 3000; // 부활 전 3초 점멸 예고
         state.chaser.entryScheduledDir = 'RANDOM'; // 방향을 RANDOM으로 명시
-        // 경로 기반 시뮬레이션 리셋 (부활 시 경로 추적 초기화)
-        state.chaser.pathHistoryIndex = 0;
         
         // 무작위 위치 스폰 (가장자리 제외)
         const chunk = state.chunks.get(getChunkKey(x, y));
@@ -2382,43 +2367,9 @@ function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
         if (!state.chaser.active) {
             initChaserFirstTimeRandomInThisChunk();
         } else {
-            // 추격자가 플레이어와 같은 청크에 있는지 확인
-            const isChaserInPlayerChunk = state.chaser.chunk.x === x && state.chaser.chunk.y === y;
-            if (isChaserInPlayerChunk) {
-                // 추격자가 이미 이 청크에 있고 이동 중이면 입구 진입 예약하지 않음
-                // (플레이어가 다시 돌아왔을 때 추격자가 경과한 시간만큼 이동한 상태로 유지)
-                if (state.chaser.isPresentInMaze) {
-                    // 추격자가 이미 청크에 있으므로 입구 진입 예약하지 않음
-                    // 추격자는 계속 이동 중인 상태로 유지됨
-                    // 경로 기반 시뮬레이션 인덱스 리셋 (플레이어와 같은 청크에 있으므로)
-                    state.chaser.pathHistoryIndex = 0;
-                } else {
-                    // 추격자가 이 청크에 있지만 아직 등장하지 않았으면 입구 진입 예약
-                    // 부활 예약('RANDOM')이 아닌 경우에만 입구 진입 예약
-                    if (state.chaser.entryScheduledDir !== 'RANDOM') {
-                        scheduleChaserEntryIntoPlayerChunk(entryDir);
-                    }
-                    // 경로 기반 시뮬레이션 인덱스 리셋
-                    state.chaser.pathHistoryIndex = 0;
-                }
-            } else {
-                // 추격자가 다른 청크에 있으면 입구 진입 예약하지 않음 (이전 청크에서 계속 활동)
-                // 경로 기반 시뮬레이션은 계속 진행됨
-                // 단, 경로가 없으면 추적자를 플레이어 청크로 이동시켜야 함
-                const pathHistory = state.player.pathHistory || [];
-                const pathIndex = state.chaser.pathHistoryIndex || 0;
-                if (pathIndex >= pathHistory.length) {
-                    // 경로가 없으면 추적자를 플레이어 청크로 이동
-                    state.chaser.chunk.x = x;
-                    state.chaser.chunk.y = y;
-                    const entryPos = getSpawnPosForEntry(entryDir);
-                    state.chaser.pos = { ...entryPos };
-                    state.chaser.isPresentInMaze = false;
-                    state.chaser.entryScheduledDir = entryDir;
-                    state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
-                    state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
-                    state.chaser.pathHistoryIndex = 0;
-                }
+            // 이미 활성화된 상태라면, 부활 예약('RANDOM')이 아닌 경우에만 입구 진입 예약
+            if (state.chaser.entryScheduledDir !== 'RANDOM') {
+                scheduleChaserEntryIntoPlayerChunk(entryDir);
             }
         }
     }
@@ -2459,8 +2410,6 @@ function initChaserFirstTimeRandomInThisChunk() {
     state.chaser.pathIndex = 0;
     state.chaser.lastRepathMs = 0;
     state.chaser.lastTargetTile = null;
-    // 경로 기반 시뮬레이션 초기화 (최초 스폰이므로 경로 없음)
-    state.chaser.pathHistoryIndex = 0;
 
     // "3번째 행에서 랜덤 지점 스폰"도 동일하게 1초 후 등장 연출 적용
     state.chaser.entryScheduledDir = 'RANDOM';
@@ -2602,8 +2551,6 @@ function materializeChaserIntoPlayerChunk(entryDir) {
     // 추적자 체력 복구 (부활 시)
     state.chaser.hp = CONFIG.MISSILE_DAMAGE * 5;
     state.chaser.maxHp = CONFIG.MISSILE_DAMAGE * 5;
-    // 경로 기반 시뮬레이션 리셋 (플레이어와 같은 청크에 있으므로)
-    state.chaser.pathHistoryIndex = 0;
 
     // 최초 스폰(RANDOM)은 예약된 좌표 사용
     if (entryDir === 'RANDOM' && state.chaser.entryScheduledPos) {
@@ -2684,8 +2631,6 @@ function resetAfterCaught() {
     state.chaser.pathIndex = 0;
     state.chaser.lastRepathMs = 0;
     state.chaser.lastTargetTile = null;
-    // 경로 기반 시뮬레이션 리셋 (플레이어가 잡혔으므로 경로 추적 초기화)
-    state.chaser.pathHistoryIndex = 0;
     state.chaser.graceUntilMs = state.nowMs + CONFIG.CHASER_GRACE_MS;
     state.chaser.isPresentInMaze = false;
     state.chaser.entryScheduledDir = state.currentEntryDir;
@@ -2825,43 +2770,30 @@ function update(dt) {
         updateCollectiblesAndProjectiles(dt);
         updateFx(dt);
 
-        // 추격자 투사체 업데이트 (추적자가 있는 청크에서만)
+        // 추격자 투사체 업데이트
         for (let i = state.chaserProjectiles.length - 1; i >= 0; i--) {
             const p = state.chaserProjectiles[i];
-            // 미사일이 속한 청크 정보가 없으면 기본값으로 현재 추적자 청크 사용
-            const projChunk = p.chunk || state.chaser.chunk;
-            const projChunkKey = getChunkKey(projChunk.x, projChunk.y);
-            const projChunkObj = state.chunks.get(projChunkKey);
-            if (!projChunkObj) {
-                // 미사일이 속한 청크가 없으면 제거
-                state.chaserProjectiles.splice(i, 1);
-                continue;
-            }
-            
             p.pos.x += p.vel.x * dtSec;
             p.pos.y += p.vel.y * dtSec;
 
-            // 플레이어와 같은 청크에 있을 때만 충돌 체크
-            const isPlayerInProjChunk = state.currentChunk.x === projChunk.x && state.currentChunk.y === projChunk.y;
-            if (isPlayerInProjChunk) {
-                const dx = state.player.mazePos.x - p.pos.x;
-                const dy = state.player.mazePos.y - p.pos.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist < CONFIG.PLAYER_RADIUS + 0.1) {
-                    state.chaserProjectiles.splice(i, 1);
-                    applyPlayerHit({
-                        livesLoss: 1,
-                        canUseShield: true,
-                        flashA: 0.2,
-                        flashColor: '#ff0000',
-                        shake: 3.0,
-                        sfx: 'resource/missile-explosion-168600.mp3',
-                    });
-                    continue;
-                }
+            // 플레이어 충돌
+            const dx = state.player.mazePos.x - p.pos.x;
+            const dy = state.player.mazePos.y - p.pos.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < CONFIG.PLAYER_RADIUS + 0.1) {
+                state.chaserProjectiles.splice(i, 1);
+                applyPlayerHit({
+                    livesLoss: 1,
+                    canUseShield: true,
+                    flashA: 0.2,
+                    flashColor: '#ff0000',
+                    shake: 3.0,
+                    sfx: 'resource/missile-explosion-168600.mp3',
+                });
+                continue;
             }
 
-            // 맵 밖 제거 (청크 경계를 넘어가면 제거)
+            // 맵 밖 제거
             if (p.pos.x < -2 || p.pos.x > CONFIG.MAZE_SIZE + 2 || p.pos.y < -2 || p.pos.y > CONFIG.MAZE_SIZE + 2) {
                 state.chaserProjectiles.splice(i, 1);
             }
@@ -3297,14 +3229,15 @@ function updateChaser(dt) {
     if (state.boss.active) return;
     // 보스전 직후엔 일정 시간 추격자/미사일 등장 금지
     if (state.chaser.bossCooldownUntilMs && state.nowMs < state.chaser.bossCooldownUntilMs) return;
+    // 추격자는 플레이어와 같은 청크에 있다고 가정(청크 넘어갈 때 함께 진입)
+    const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
+    const maze = chunk.maze;
+
     // 살상 미사일에 의해 파괴된 경우 처리
     if (state.chaser.deadUntilNextChunk) return;
 
-    // 플레이어와 같은 청크에 있는지 확인 (먼저 선언)
-    const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.currentChunk.y === state.chaser.chunk.y;
-    
-    // 청크 진입 연출: 플레이어와 같은 청크에 있을 때만 입구 진입 연출 처리
-    if (!state.chaser.isPresentInMaze && isPlayerInChaserChunk) {
+    // 청크 진입 연출: 아직 등장 시간이 아니면 아예 미존재 처리
+    if (!state.chaser.isPresentInMaze) {
         if (state.chaser.entryScheduledUntilMs && state.nowMs >= state.chaser.entryScheduledUntilMs) {
             const dir = state.chaser.entryScheduledDir || state.currentEntryDir || 'S';
             
@@ -3324,49 +3257,9 @@ function updateChaser(dt) {
             return;
         }
     }
-    
-    // 추격자는 자신의 청크에 있음 (플레이어와 다른 청크에 있을 수 있음)
-    // 경로 기반 시뮬레이션을 위해 청크 정보 가져오기
-    const chaserChunkKey = getChunkKey(state.chaser.chunk.x, state.chaser.chunk.y);
-    let chunk = state.chunks.get(chaserChunkKey);
-    
-    // 경로 기반 시뮬레이션: 추적자가 경로 청크에 있을 수 있으므로 해당 청크를 가져옴
-    const pathHistory = state.player.pathHistory || [];
-    const pathIndex = state.chaser.pathHistoryIndex || 0;
-    let simulatedChunk = null;
-    
-    if (!isPlayerInChaserChunk && pathIndex < pathHistory.length) {
-        // 경로 기반 시뮬레이션: 경로 청크 정보 가져오기
-        const currentPath = pathHistory[pathIndex];
-        if (currentPath) {
-            const simulatedChunkKey = getChunkKey(currentPath.chunk.x, currentPath.chunk.y);
-            simulatedChunk = state.chunks.get(simulatedChunkKey);
-            if (!simulatedChunk) {
-                // 청크가 없으면 생성 (가상 시뮬레이션을 위해)
-                simulatedChunk = new Chunk(currentPath.chunk.x, currentPath.chunk.y);
-                state.chunks.set(simulatedChunkKey, simulatedChunk);
-            }
-            // 추적자가 경로 청크에 있으면 해당 청크 사용
-            if (state.chaser.chunk.x === currentPath.chunk.x && state.chaser.chunk.y === currentPath.chunk.y) {
-                chunk = simulatedChunk;
-            }
-        }
-    }
-    
-    if (!chunk) {
-        // 추격자 청크가 없으면 업데이트 불가
-        // 경로 기반 시뮬레이션을 위해 청크 생성 시도
-        if (simulatedChunk) {
-            chunk = simulatedChunk;
-        } else {
-            return;
-        }
-    }
-    
-    const maze = chunk.maze;
 
-    // 20렙부터 레이저 발사 (같은 청크에 있을 때만)
-    if (isPlayerInChaserChunk && getFloor() >= 20 && state.nowMs - state.chaser.lastShotMs > 5000) {
+    // 20렙부터 레이저 발사
+    if (getFloor() >= 20 && state.nowMs - state.chaser.lastShotMs > 5000) {
         state.chaser.lastShotMs = state.nowMs;
         const dx = state.player.mazePos.x - state.chaser.pos.x;
         const dy = state.player.mazePos.y - state.chaser.pos.y;
@@ -3374,34 +3267,31 @@ function updateChaser(dt) {
         const speed = CONFIG.MISSILE_SPEED / 2;
         state.chaserProjectiles.push({
             pos: { x: state.chaser.pos.x, y: state.chaser.pos.y },
-            vel: { x: (dx/dist)*speed, y: (dy/dist)*speed },
-            chunk: { x: state.chaser.chunk.x, y: state.chaser.chunk.y } // 미사일이 속한 청크 저장
+            vel: { x: (dx/dist)*speed, y: (dy/dist)*speed }
         });
         // 추적자 미사일 발사 소리
         playSfx('resource/chaser_missile-44538.mp3', { volume: 0.7, rate: 1.0 });
     }
 
-    // 플레이어와 직접 충돌 체크 (같은 청크에 있을 때만)
+    // 플레이어와 직접 충돌 체크
     // - 추격자가 "기절(stun)" 상태일 때는 몸박 데미지를 주지 않음
     // - (기존에는 스턴/유예와 상관없이 체크해서, 스턴 중에도 데미지가 들어갈 수 있었음)
-    if (isPlayerInChaserChunk) {
-        const pdx = state.player.mazePos.x - state.chaser.pos.x;
-        const pdy = state.player.mazePos.y - state.chaser.pos.y;
-        const pdist = Math.sqrt(pdx*pdx + pdy*pdy);
-        const isStunned = state.nowMs < state.chaser.stunUntilMs;
-        if (!isStunned && pdist < (CONFIG.PLAYER_RADIUS + CONFIG.CHASER_RADIUS) * 0.8) {
-            // 하트 1 감소 및 일시 무적(유예) 부여
-            if (state.nowMs > state.chaser.graceUntilMs) {
-                applyPlayerHit({
-                    livesLoss: 1,
-                    canUseShield: true,
-                    flashA: 0.25,
-                    flashColor: '#ff0000',
-                    shake: 5.0,
-                    sfx: 'resource/missile-explosion-168600.mp3',
-                });
-                state.chaser.graceUntilMs = state.nowMs + 1500; // 1.5초 유예
-            }
+    const pdx = state.player.mazePos.x - state.chaser.pos.x;
+    const pdy = state.player.mazePos.y - state.chaser.pos.y;
+    const pdist = Math.sqrt(pdx*pdx + pdy*pdy);
+    const isStunned = state.nowMs < state.chaser.stunUntilMs;
+    if (!isStunned && pdist < (CONFIG.PLAYER_RADIUS + CONFIG.CHASER_RADIUS) * 0.8) {
+        // 하트 1 감소 및 일시 무적(유예) 부여
+        if (state.nowMs > state.chaser.graceUntilMs) {
+            applyPlayerHit({
+                livesLoss: 1,
+                canUseShield: true,
+                flashA: 0.25,
+                flashColor: '#ff0000',
+                shake: 5.0,
+                sfx: 'resource/missile-explosion-168600.mp3',
+            });
+            state.chaser.graceUntilMs = state.nowMs + 1500; // 1.5초 유예
         }
     }
 
@@ -3419,160 +3309,30 @@ function updateChaser(dt) {
     
     const moveDist = speed * dtSec;
 
-    // 플레이어와 같은 청크에 있으면 플레이어를 직접 추적
-    if (isPlayerInChaserChunk) {
-        // 같은 청크에 있으면 플레이어를 추적
-        const targetTile = { x: Math.floor(state.player.mazePos.x), y: Math.floor(state.player.mazePos.y) };
-        const chaserTile = { x: Math.floor(state.chaser.pos.x), y: Math.floor(state.chaser.pos.y) };
-
-        const needRepath =
-            !state.chaser.lastTargetTile ||
-            state.chaser.lastTargetTile.x !== targetTile.x ||
-            state.chaser.lastTargetTile.y !== targetTile.y ||
-            (state.nowMs - state.chaser.lastRepathMs) > CONFIG.CHASER_REPATH_MS ||
-            state.chaser.path.length === 0 ||
-            state.chaser.pathIndex >= state.chaser.path.length;
-
-        if (needRepath) {
-            const path = bfsPath(maze, chaserTile, targetTile);
-            state.chaser.path = path;
-            state.chaser.pathIndex = path.length > 1 ? 1 : 0;
-            state.chaser.lastRepathMs = state.nowMs;
-            state.chaser.lastTargetTile = { ...targetTile };
-        }
-
-        if (state.chaser.path.length <= 1) return;
-
-        let remaining = moveDist;
-        while (remaining > 0 && state.chaser.pathIndex < state.chaser.path.length) {
-            const target = state.chaser.path[state.chaser.pathIndex];
-            const tx = target.x + 0.5;
-            const ty = target.y + 0.5;
-            const dx = tx - state.chaser.pos.x;
-            const dy = ty - state.chaser.pos.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 1e-6) {
-                state.chaser.pathIndex += 1;
-                continue;
-            }
-            const step = Math.min(remaining, dist);
-            state.chaser.pos.x += (dx / dist) * step;
-            state.chaser.pos.y += (dy / dist) * step;
-            remaining -= step;
-            if (step === dist) state.chaser.pathIndex += 1;
-        }
-
-        // 잡힘 판정
-        const rx = state.chaser.pos.x - state.player.mazePos.x;
-        const ry = state.chaser.pos.y - state.player.mazePos.y;
-        const hitR = CONFIG.CHASER_RADIUS + CONFIG.PLAYER_RADIUS;
-        if (rx * rx + ry * ry <= hitR * hitR) {
-            resetAfterCaught();
-        }
-        return;
-    }
-    
-    // 플레이어와 다른 청크에 있으면 경로 기반 시뮬레이션
-    // 경로가 없거나 끝났으면 플레이어와 같은 청크에 도달한 것
-    if (pathIndex >= pathHistory.length) {
-        // 추적자가 플레이어 청크에 있지 않으면 이동
-        if (state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y) {
-            state.chaser.chunk.x = state.currentChunk.x;
-            state.chaser.chunk.y = state.currentChunk.y;
-            // 플레이어 청크의 입구로 스폰 (현재 입구 방향 사용)
-            const entryPos = getSpawnPosForEntry(state.currentEntryDir || 'S');
-            state.chaser.pos = { ...entryPos };
-            state.chaser.isPresentInMaze = false; // 입구 진입 연출을 위해
-            state.chaser.entryScheduledDir = state.currentEntryDir || 'S';
-            state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
-            state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
-            state.chaser.path = [];
-            state.chaser.pathIndex = 0;
-            state.chaser.lastRepathMs = 0;
-            state.chaser.lastTargetTile = null;
-        }
-        // 경로 기반 시뮬레이션 리셋 (플레이어와 같은 청크에 도달했으므로)
-        state.chaser.pathHistoryIndex = 0;
-        return;
-    }
-    
-    // 현재 따라가고 있는 경로 항목 가져오기
-    const currentPath = pathHistory[pathIndex];
-    if (!currentPath) return;
-    
-    // 추적자가 현재 경로의 청크에 있는지 확인
-    const isChaserInPathChunk = state.chaser.chunk.x === currentPath.chunk.x && state.chaser.chunk.y === currentPath.chunk.y;
-    
-    // 추적자가 경로 청크에 없으면 입구로 이동
-    if (!isChaserInPathChunk) {
-        state.chaser.chunk.x = currentPath.chunk.x;
-        state.chaser.chunk.y = currentPath.chunk.y;
-        const entryPos = getSpawnPosForEntry(currentPath.entryDir);
-        state.chaser.pos = { ...entryPos };
-        // 경로 기반 시뮬레이션 중이므로 항상 표시 (입구 진입 연출 없이 바로 이동)
-        // 단, 플레이어와 같은 청크가 아닐 때만 (같은 청크면 입구 진입 연출 필요)
-        if (state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y) {
-            state.chaser.isPresentInMaze = true; // 다른 청크면 바로 표시
-        } else {
-            // 플레이어와 같은 청크면 입구 진입 연출 사용
-            state.chaser.isPresentInMaze = false;
-            state.chaser.entryScheduledDir = currentPath.entryDir;
-            state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
-            state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
-        }
-        state.chaser.path = [];
-        state.chaser.pathIndex = 0;
-        state.chaser.lastRepathMs = 0;
-        state.chaser.lastTargetTile = null;
-    } else {
-        // 추적자가 이미 경로 청크에 있으면 isPresentInMaze 확인 및 설정
-        // (경로 기반 시뮬레이션 중이므로 다른 청크면 항상 표시)
-        if (state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y) {
-            state.chaser.isPresentInMaze = true; // 다른 청크면 바로 표시
-        }
-    }
-    
-    // 시뮬레이션에 사용할 청크 (경로 청크)
-    if (!simulatedChunk) {
-        const simulatedChunkKey = getChunkKey(currentPath.chunk.x, currentPath.chunk.y);
-        simulatedChunk = state.chunks.get(simulatedChunkKey);
-        if (!simulatedChunk) {
-            // 청크가 없으면 생성 (가상 시뮬레이션을 위해)
-            simulatedChunk = new Chunk(currentPath.chunk.x, currentPath.chunk.y);
-            state.chunks.set(simulatedChunkKey, simulatedChunk);
-        }
-    }
-    
-    // 현재 청크에서 출구로 이동 시뮬레이션
-    const simulatedMaze = simulatedChunk.maze;
-    const size = CONFIG.MAZE_SIZE;
-    let targetTile;
-    if (currentPath.exitDir === 'W') targetTile = { x: 0, y: Math.floor(size / 2) };
-    else if (currentPath.exitDir === 'E') targetTile = { x: size - 1, y: Math.floor(size / 2) };
-    else if (currentPath.exitDir === 'S') targetTile = { x: Math.floor(size / 2), y: 0 };
-    else if (currentPath.exitDir === 'N') targetTile = { x: Math.floor(size / 2), y: size - 1 };
-    else targetTile = { x: Math.floor(size / 2), y: Math.floor(size / 2) };
-    
+    const playerTile = { x: Math.floor(state.player.mazePos.x), y: Math.floor(state.player.mazePos.y) };
     const chaserTile = { x: Math.floor(state.chaser.pos.x), y: Math.floor(state.chaser.pos.y) };
-    
+
     const needRepath =
         !state.chaser.lastTargetTile ||
-        state.chaser.lastTargetTile.x !== targetTile.x ||
-        state.chaser.lastTargetTile.y !== targetTile.y ||
+        state.chaser.lastTargetTile.x !== playerTile.x ||
+        state.chaser.lastTargetTile.y !== playerTile.y ||
         (state.nowMs - state.chaser.lastRepathMs) > CONFIG.CHASER_REPATH_MS ||
         state.chaser.path.length === 0 ||
         state.chaser.pathIndex >= state.chaser.path.length;
-    
+
     if (needRepath) {
-        const path = bfsPath(simulatedMaze, chaserTile, targetTile);
+        const path = bfsPath(maze, chaserTile, playerTile);
         state.chaser.path = path;
         state.chaser.pathIndex = path.length > 1 ? 1 : 0;
         state.chaser.lastRepathMs = state.nowMs;
-        state.chaser.lastTargetTile = { ...targetTile };
+        state.chaser.lastTargetTile = { ...playerTile };
     }
-    
-    if (state.chaser.path.length <= 1) return;
-    
+
+    if (state.chaser.path.length <= 1) {
+        // 경로가 없으면(드문 경우) 플레이어 방향으로 살짝 끌어당기되 충돌은 무시하지 않음
+        return;
+    }
+
     let remaining = moveDist;
     while (remaining > 0 && state.chaser.pathIndex < state.chaser.path.length) {
         const target = state.chaser.path[state.chaser.pathIndex];
@@ -3591,62 +3351,13 @@ function updateChaser(dt) {
         remaining -= step;
         if (step === dist) state.chaser.pathIndex += 1;
     }
-    
-    // 출구 도달 체크
-    const margin = 0.3;
-    let exitDir = null;
-    if (state.chaser.pos.x < margin) exitDir = 'W';
-    else if (state.chaser.pos.x > size - margin) exitDir = 'E';
-    else if (state.chaser.pos.y < margin) exitDir = 'S';
-    else if (state.chaser.pos.y > size - margin) exitDir = 'N';
-    
-    // 출구에 도달했고, 출구 방향이 경로의 exitDir과 일치하면 다음 경로로 이동
-    if (exitDir && exitDir === currentPath.exitDir) {
-        // 통과한 경로 항목 제거 (메모리 절약)
-        const removedCount = pathIndex + 1;
-        state.player.pathHistory.splice(0, removedCount);
-        
-        // 다음 경로가 있으면 해당 청크로 이동
-        if (state.player.pathHistory.length > 0) {
-            const nextPath = state.player.pathHistory[0];
-            state.chaser.chunk.x = nextPath.chunk.x;
-            state.chaser.chunk.y = nextPath.chunk.y;
-            const entryPos = getSpawnPosForEntry(nextPath.entryDir);
-            state.chaser.pos = { ...entryPos };
-            // 인덱스는 0으로 리셋 (배열이 줄어들었으므로)
-            state.chaser.pathHistoryIndex = 0;
-            // 다음 청크로 이동: 플레이어와 같은 청크가 아니면 바로 표시, 같으면 입구 진입 연출
-            if (state.chaser.chunk.x !== state.currentChunk.x || state.chaser.chunk.y !== state.currentChunk.y) {
-                state.chaser.isPresentInMaze = true; // 다른 청크면 바로 표시
-            } else {
-                // 플레이어와 같은 청크면 입구 진입 연출 사용
-                state.chaser.isPresentInMaze = false;
-                state.chaser.entryScheduledDir = nextPath.entryDir;
-                state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
-                state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
-            }
-            state.chaser.path = [];
-            state.chaser.pathIndex = 0;
-            state.chaser.lastRepathMs = 0;
-            state.chaser.lastTargetTile = null;
-        } else {
-            // 경로가 끝났으면 플레이어와 같은 청크에 도달한 것
-            // 추적자를 플레이어 청크로 이동
-            state.chaser.chunk.x = state.currentChunk.x;
-            state.chaser.chunk.y = state.currentChunk.y;
-            const entryPos = getSpawnPosForEntry(state.currentEntryDir || 'S');
-            state.chaser.pos = { ...entryPos };
-            state.chaser.isPresentInMaze = false;
-            state.chaser.entryScheduledDir = state.currentEntryDir || 'S';
-            state.chaser.entryScheduledUntilMs = state.nowMs + CONFIG.CHASER_ENTRY_DELAY_MS;
-            state.chaser.graceUntilMs = Math.max(state.chaser.graceUntilMs, state.chaser.entryScheduledUntilMs);
-            state.chaser.path = [];
-            state.chaser.pathIndex = 0;
-            state.chaser.lastRepathMs = 0;
-            state.chaser.lastTargetTile = null;
-            // 경로 기반 시뮬레이션 리셋
-            state.chaser.pathHistoryIndex = 0;
-        }
+
+    // 잡힘 판정
+    const rx = state.chaser.pos.x - state.player.mazePos.x;
+    const ry = state.chaser.pos.y - state.player.mazePos.y;
+    const hitR = CONFIG.CHASER_RADIUS + CONFIG.PLAYER_RADIUS;
+    if (rx * rx + ry * ry <= hitR * hitR) {
+        resetAfterCaught();
     }
 }
 
@@ -4178,8 +3889,6 @@ function onMissileHitTarget(m) {
             state.chaser.bossCooldownUntilMs = state.nowMs + 5000;
             // entryScheduledUntilMs가 과거로 남아있으면 즉시 등장하므로, 쿨다운 이후로 밀어둠
             state.chaser.entryScheduledUntilMs = state.chaser.bossCooldownUntilMs;
-            // 경로 기반 시뮬레이션 리셋 (보스 처치 후 추적자 상태 초기화)
-            state.chaser.pathHistoryIndex = 0;
 
             // 보스 클리어 후 다음 층(North)으로 자동 이동 예약
             const nextX = state.currentChunk.x;
@@ -4213,8 +3922,6 @@ function onMissileHitTarget(m) {
                 state.chaser.hp = 0;
                 state.chaser.isPresentInMaze = false;
                 state.chaser.deadUntilNextChunk = true;
-                // 경로 기반 시뮬레이션 리셋 (추적자 처치 후 경로 추적 초기화)
-                state.chaser.pathHistoryIndex = 0;
                 addScore(500, getFloor());
                 // 폭발 효과
                 fxBurstMaze(state.chaser.pos.x, state.chaser.pos.y, {
@@ -4530,13 +4237,16 @@ function checkExits() {
     // 중심 좌표 기준: 유효 영역은 (0~size)이며 타일 중심은 0.5~size-0.5
     if (p.y < 0) exitMaze(0, 1); // North (Y 증가가 북쪽)
     else if (p.y > CONFIG.MAZE_SIZE) {
-        // 1층에서는 아래로 이동 불가
-        const floor = getFloor();
-        if (floor === 1) {
+        // 첫 번째 행(y=0)에서 시작 청크 외에는 남쪽으로 내려갈 수 없음(아래 막힘)
+        if (
+            state.currentChunk.y === 0 &&
+            !(state.currentChunk.x === CONFIG.START_CHUNK_X && state.currentChunk.y === CONFIG.START_CHUNK_Y)
+        ) {
             state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
         } else {
-            // 남쪽으로 이동 가능 (아래로 진행)
-            exitMaze(0, -1);
+            // 시작 청크의 남쪽은 "외부 시작점" 개념이라 실제로 아래 청크로 이동은 금지
+            // (dy=-1로 나가면 y가 0으로 clamp되어 같은 청크로 다시 들어가 버릴 수 있음)
+            state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
         }
     }
     else if (p.x < 0) {
@@ -4559,37 +4269,23 @@ function exitMaze(dx, dy) {
 
     const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
     chunk.cleared = true;
-    
-    // 플레이어 경로 기록: 현재 청크를 나가는 정보 저장
-    // 출구 방향 계산
-    let exitDir = 'S'; // 기본값
-    if (dx === -1 && dy === 0) exitDir = 'W'; // 서쪽으로 나감
-    else if (dx === 1 && dy === 0) exitDir = 'E'; // 동쪽으로 나감
-    else if (dx === 0 && dy === 1) exitDir = 'N'; // 북쪽으로 나감
-    else if (dx === 0 && dy === -1) exitDir = 'S'; // 남쪽으로 나감
-    
-    // 경로 기록 추가 (추적자가 따라갈 경로)
-    state.player.pathHistory.push({
-        chunk: { x: state.currentChunk.x, y: state.currentChunk.y },
-        entryDir: state.currentEntryDir || 'S',
-        exitDir: exitDir,
-        enteredAt: state.nowMs,
-    });
 
-    // 추격자는 이전 청크에 남아있음 (플레이어가 청크를 넘어가도 추격자는 이전 청크에 유지)
-    // 추격자가 플레이어를 따라오려면 추격자도 같은 방향으로 청크를 넘어가야 함
-    // 하지만 플레이어가 청크를 넘어갈 때 추격자는 이전 청크에 남아있도록 함
-    // 추격자가 있는 청크는 별도로 업데이트되어야 함
+    // 추격자 리스폰 시간:
+    // - 현재 청크에서 "추격자 위치 → 내가 나간 출구 위치" 최단거리(BFS)로 1~5초 결정
+    // - 아직 추격자가 리스폰/등장도 안 했던 상태(INBOUND)에서 청크를 탈출하면 무조건 5초
+    if (state.chaser.active) {
+        state.chaser.nextEntryDelayMs = computeChaserRespawnDelayMsFromExit(chunk, dx, dy);
+    }
 
     // 안전장치: 좌/우 끝 청크는 바깥으로 이동 금지
     if (dx === -1 && state.currentChunk.x === 0) return;
     if (dx === 1 && state.currentChunk.x === CONFIG.CHUNK_COLS - 1) return;
-    // 남쪽(아래)로 이동 가능 (제한 제거)
+    // 아래(남쪽)로 이동 가능하므로 제한 제거
 
     // 다음 청크 좌표 계산(정수)
     const prevWorldY = Math.round(state.player.worldPos.y);
     const nextX = Math.max(0, Math.min(CONFIG.CHUNK_COLS - 1, Math.round(state.player.worldPos.x) + dx));
-    const nextY = Math.max(0, Math.round(state.player.worldPos.y) + dy); // y<0 금지
+    const nextY = Math.round(state.player.worldPos.y) + dy; // 음수 y도 허용
 
     // 점수: 층수가 올라갈 때마다 +100 (층수 배수 적용)
     if (nextY > prevWorldY) {
@@ -5721,9 +5417,8 @@ function drawMaze() {
         }
     }
 
-    // 추격자 (미로 내부) - 플레이어와 같은 청크에 있을 때만 렌더링
-    const isChaserInPlayerChunk = state.chaser.chunk.x === state.currentChunk.x && state.chaser.chunk.y === state.currentChunk.y;
-    if (state.chaser.active && state.chaser.isPresentInMaze && isChaserInPlayerChunk && !state.boss.active && !state.chaser.deadUntilNextChunk) {
+    // 추격자 (미로 내부)
+    if (state.chaser.active && state.chaser.isPresentInMaze && !state.boss.active && !state.chaser.deadUntilNextChunk) {
         const cX = offsetX + state.chaser.pos.x * cellSize;
         const cY = offsetY + state.chaser.pos.y * cellSize;
         
@@ -5791,12 +5486,8 @@ function drawMaze() {
         }
     }
 
-    // 추격자 투사체 렌더 (플레이어와 같은 청크에 있는 미사일만)
+    // 추격자 투사체 렌더
     for (const p of state.chaserProjectiles) {
-        const projChunk = p.chunk || state.chaser.chunk;
-        // 플레이어와 같은 청크에 있는 미사일만 렌더링
-        if (projChunk.x !== state.currentChunk.x || projChunk.y !== state.currentChunk.y) continue;
-        
         const px = offsetX + p.pos.x * cellSize;
         const py = offsetY + p.pos.y * cellSize;
         const vx = p.vel?.x ?? 0;
