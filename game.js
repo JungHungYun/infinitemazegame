@@ -2857,12 +2857,12 @@ function updateBoss(dt) {
         const pattern = Math.floor(Math.random() * 5);
         if (pattern === 0) {
             // 십자 레이저
-            state.boss.lasers.push({ x: 8.5, y: 8.5, angle: 0, width: 2, lifeMs: 1500, warnMs, startMs: state.nowMs, soundPlayed: false });
-            state.boss.lasers.push({ x: 8.5, y: 8.5, angle: Math.PI / 2, width: 2, lifeMs: 1500, warnMs, startMs: state.nowMs, soundPlayed: false });
+            state.boss.lasers.push({ x: 8.5, y: 8.5, angle: 0, width: 2, lifeMs: 1500, warnMs, startMs: state.nowMs, soundPlayed: false, soundScheduled: false });
+            state.boss.lasers.push({ x: 8.5, y: 8.5, angle: Math.PI / 2, width: 2, lifeMs: 1500, warnMs, startMs: state.nowMs, soundPlayed: false, soundScheduled: false });
         } else if (pattern === 1) {
             // 원형 퍼지는 레이저 (간소화해서 4방향)
             for(let i=0; i<4; i++) {
-                state.boss.lasers.push({ x: 8.5, y: 8.5, angle: (Math.PI/2)*i + Math.PI/4, width: 1.5, lifeMs: 1200, warnMs, startMs: state.nowMs, soundPlayed: false });
+                state.boss.lasers.push({ x: 8.5, y: 8.5, angle: (Math.PI/2)*i + Math.PI/4, width: 1.5, lifeMs: 1200, warnMs, startMs: state.nowMs, soundPlayed: false, soundScheduled: false });
             }
         } else if (pattern === 2) {
             // 패턴 1: 체스판 폭발
@@ -2948,6 +2948,9 @@ function updateBoss(dt) {
     }
 
     // 레이저 업데이트 및 피격 판정
+    // 효과음 재생을 위한 그룹화 (같은 패턴의 레이저는 한 번만 재생)
+    const laserSoundGroups = new Map(); // 패턴 시작 시간 -> 재생 여부
+    
     for (let i = state.boss.lasers.length - 1; i >= 0; i--) {
         const laser = state.boss.lasers[i];
         const t = state.nowMs - laser.startMs;
@@ -2957,10 +2960,18 @@ function updateBoss(dt) {
             continue;
         }
 
-        // 경고 시간 후 실제 공격 - 효과음 재생
-        if (t > warnMs && !laser.soundPlayed) {
-            laser.soundPlayed = true;
-            playSfx('resource/laser.mp3', { volume: 0.8, rate: 1.0 });
+        // 경고 시간 후 실제 공격 - 효과음 재생 (정확한 타이밍)
+        // 경고가 끝나는 정확한 시점에 재생 (warnMs에 도달하는 순간)
+        if (t >= warnMs && t < warnMs + 50 && !laser.soundPlayed) {
+            // 같은 패턴(같은 startMs)의 레이저들은 한 번만 재생
+            const groupKey = laser.startMs;
+            if (!laserSoundGroups.has(groupKey)) {
+                laserSoundGroups.set(groupKey, true);
+                laser.soundPlayed = true;
+                playSfx('resource/laser.mp3', { volume: 0.8, rate: 1.0 });
+            } else {
+                laser.soundPlayed = true; // 이미 재생되었으므로 표시만
+            }
         }
 
         if (t > warnMs) {

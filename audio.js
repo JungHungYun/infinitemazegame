@@ -338,7 +338,8 @@ function unlockAudioOnce() {
             'resource/small-rock-break-194553.mp3',
             'resource/rock-break-hard-184891.mp3',
             'resource/pick-coin-384921.mp3',
-            'resource/pick_missile-83043.mp3'
+            'resource/pick_missile-83043.mp3',
+            'resource/laser.mp3'
         ];
         sfxFiles.forEach(src => {
             loadSfxBuffer(src).catch(() => {});
