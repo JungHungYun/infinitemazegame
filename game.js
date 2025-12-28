@@ -109,7 +109,8 @@ const state = {
         hp: 0,
         maxHp: 50,
         lastAttackMs: 0,
-        lasers: [], // [{x, y, angle, width, lifeMs}]
+        lasers: [], // [{x, y, angle, width, lifeMs, soundPlayed?}]
+        gridPatterns: [], // [{type, tiles: [{x, y, state, warnStartMs, damageStartMs, damageEndMs}], startMs}]
         missileSpawnMs: 0,
     },
     mouse: { x: 0, y: 0 },
@@ -2845,21 +2846,101 @@ function updateBoss(dt) {
         return Math.round(snappedSec * 1000);
     };
 
-    // 보스 패턴 (레이저)
+    // 보스 패턴 (레이저 + 격자 장판)
     if (state.nowMs - state.boss.lastAttackMs > 3000) {
         state.boss.lastAttackMs = state.nowMs;
         const warnMs = getBossLaserWarnMs();
-        // 무작위 레이저 패턴 생성
-        const pattern = Math.floor(Math.random() * 2);
+        // 무작위 패턴 생성 (0-1: 레이저, 2-4: 격자 장판)
+        const pattern = Math.floor(Math.random() * 5);
         if (pattern === 0) {
             // 십자 레이저
-            state.boss.lasers.push({ x: 8.5, y: 8.5, angle: 0, width: 2, lifeMs: 1500, warnMs, startMs: state.nowMs });
-            state.boss.lasers.push({ x: 8.5, y: 8.5, angle: Math.PI / 2, width: 2, lifeMs: 1500, warnMs, startMs: state.nowMs });
-        } else {
+            state.boss.lasers.push({ x: 8.5, y: 8.5, angle: 0, width: 2, lifeMs: 1500, warnMs, startMs: state.nowMs, soundPlayed: false });
+            state.boss.lasers.push({ x: 8.5, y: 8.5, angle: Math.PI / 2, width: 2, lifeMs: 1500, warnMs, startMs: state.nowMs, soundPlayed: false });
+        } else if (pattern === 1) {
             // 원형 퍼지는 레이저 (간소화해서 4방향)
             for(let i=0; i<4; i++) {
-                state.boss.lasers.push({ x: 8.5, y: 8.5, angle: (Math.PI/2)*i + Math.PI/4, width: 1.5, lifeMs: 1200, warnMs, startMs: state.nowMs });
+                state.boss.lasers.push({ x: 8.5, y: 8.5, angle: (Math.PI/2)*i + Math.PI/4, width: 1.5, lifeMs: 1200, warnMs, startMs: state.nowMs, soundPlayed: false });
             }
+        } else if (pattern === 2) {
+            // 패턴 1: 체스판 폭발
+            const tiles = [];
+            for (let y = 0; y < 17; y++) {
+                for (let x = 0; x < 17; x++) {
+                    if ((x + y) % 2 === 0) { // 체스판 패턴
+                        tiles.push({
+                            x: x + 0.5,
+                            y: y + 0.5,
+                            state: 'warning', // 'warning' | 'active' | 'done'
+                            warnStartMs: state.nowMs,
+                            damageStartMs: state.nowMs + 1500,
+                            damageEndMs: state.nowMs + 1800
+                        });
+                    }
+                }
+            }
+            state.boss.gridPatterns.push({ type: 'chess', tiles, startMs: state.nowMs });
+        } else if (pattern === 3) {
+            // 패턴 2: 행/열 순차 폭발
+            const isRow = Math.random() < 0.5;
+            const tiles = [];
+            const count = isRow ? 17 : 17;
+            const delayPerStep = 500; // 각 행/열 간격
+            
+            for (let i = 0; i < count; i++) {
+                if (isRow) {
+                    // 행 순차 폭발
+                    for (let x = 0; x < 17; x++) {
+                        tiles.push({
+                            x: x + 0.5,
+                            y: i + 0.5,
+                            state: 'warning',
+                            warnStartMs: state.nowMs + i * delayPerStep,
+                            damageStartMs: state.nowMs + i * delayPerStep + 1500,
+                            damageEndMs: state.nowMs + i * delayPerStep + 1800
+                        });
+                    }
+                } else {
+                    // 열 순차 폭발
+                    for (let y = 0; y < 17; y++) {
+                        tiles.push({
+                            x: i + 0.5,
+                            y: y + 0.5,
+                            state: 'warning',
+                            warnStartMs: state.nowMs + i * delayPerStep,
+                            damageStartMs: state.nowMs + i * delayPerStep + 1500,
+                            damageEndMs: state.nowMs + i * delayPerStep + 1800
+                        });
+                    }
+                }
+            }
+            state.boss.gridPatterns.push({ type: 'rowcol', tiles, startMs: state.nowMs });
+        } else if (pattern === 4) {
+            // 패턴 5: 랜덤 격자 폭발
+            const tiles = [];
+            const totalTiles = 17 * 17;
+            const targetCount = Math.floor(totalTiles * 0.35); // 35% 타일
+            const used = new Set();
+            
+            for (let i = 0; i < targetCount; i++) {
+                let x, y, key;
+                do {
+                    x = Math.floor(Math.random() * 17);
+                    y = Math.floor(Math.random() * 17);
+                    key = `${x},${y}`;
+                } while (used.has(key));
+                used.add(key);
+                
+                const delay = Math.floor(Math.random() * 800); // 0~0.8초 랜덤 지연
+                tiles.push({
+                    x: x + 0.5,
+                    y: y + 0.5,
+                    state: 'warning',
+                    warnStartMs: state.nowMs + delay,
+                    damageStartMs: state.nowMs + delay + 1500,
+                    damageEndMs: state.nowMs + delay + 3500 // 2초 대미지
+                });
+            }
+            state.boss.gridPatterns.push({ type: 'random', tiles, startMs: state.nowMs });
         }
     }
 
@@ -2873,7 +2954,12 @@ function updateBoss(dt) {
             continue;
         }
 
-        // 경고 시간 후 실제 공격
+        // 경고 시간 후 실제 공격 - 효과음 재생
+        if (t > warnMs && !laser.soundPlayed) {
+            laser.soundPlayed = true;
+            playSfx('resource/laser.mp3', { volume: 0.8, rate: 1.0 });
+        }
+
         if (t > warnMs) {
             const px = state.player.mazePos.x;
             const py = state.player.mazePos.y;
@@ -2890,6 +2976,48 @@ function updateBoss(dt) {
                 state.boss.lasers.splice(i, 1);
                 applyPlayerHit({ livesLoss: 1, canUseShield: true, flashA: 0.5, shake: 4 });
             }
+        }
+    }
+
+    // 격자 장판 패턴 업데이트 및 피격 판정
+    for (let i = state.boss.gridPatterns.length - 1; i >= 0; i--) {
+        const pattern = state.boss.gridPatterns[i];
+        let allDone = true;
+        
+        for (const tile of pattern.tiles) {
+            const t = state.nowMs - tile.warnStartMs;
+            
+            // 경고 단계
+            if (t >= 0 && t < (tile.damageStartMs - tile.warnStartMs)) {
+                tile.state = 'warning';
+                allDone = false;
+            }
+            // 대미지 단계
+            else if (t >= (tile.damageStartMs - tile.warnStartMs) && t < (tile.damageEndMs - tile.warnStartMs)) {
+                tile.state = 'active';
+                allDone = false;
+                
+                // 피격 판정
+                const px = state.player.mazePos.x;
+                const py = state.player.mazePos.y;
+                const dx = px - tile.x;
+                const dy = py - tile.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist < 0.5) { // 타일 중심 기준 0.5 타일 반경
+                    applyPlayerHit({ livesLoss: 1, canUseShield: true, flashA: 0.5, shake: 4 });
+                    tile.state = 'done'; // 한 번만 피격
+                }
+            }
+            // 종료
+            else {
+                tile.state = 'done';
+            }
+        }
+        
+        // 모든 타일이 완료되면 패턴 제거
+        if (allDone) {
+            state.boss.gridPatterns.splice(i, 1);
         }
     }
 
@@ -3437,6 +3565,7 @@ function onMissileHitTarget(m) {
         if (state.boss.hp <= 0) {
             state.boss.active = false;
             state.boss.lasers = []; // 레이저 즉시 제거
+            state.boss.gridPatterns = []; // 격자 장판 즉시 제거
             state.ui.bossKills = Math.max(0, Math.floor(state.ui.bossKills ?? 0)) + 1;
             const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
             if (chunk) chunk.cleared = true;
@@ -4869,6 +4998,56 @@ function drawMaze() {
                 ctx.stroke();
             }
             ctx.restore();
+        }
+
+        // 격자 장판 렌더
+        for (const pattern of state.boss.gridPatterns) {
+            for (const tile of pattern.tiles) {
+                if (tile.state === 'done') continue;
+                
+                const tileX = offsetX + tile.x * cellSize;
+                const tileY = offsetY + tile.y * cellSize;
+                const tileSize = cellSize;
+                
+                ctx.save();
+                
+                if (tile.state === 'warning') {
+                    // 경고: 빨간색 반투명 + 점멸
+                    const t = state.nowMs - tile.warnStartMs;
+                    const warnDur = tile.damageStartMs - tile.warnStartMs;
+                    const progress = Math.min(1, t / warnDur);
+                    const blink = 0.4 + 0.6 * Math.abs(Math.sin(state.nowMs * 0.015));
+                    
+                    ctx.fillStyle = `rgba(255, 40, 40, ${0.3 + 0.4 * blink * (1 - progress * 0.5)})`;
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = 'rgba(255, 60, 60, 0.6)';
+                    ctx.fillRect(tileX - tileSize / 2, tileY - tileSize / 2, tileSize, tileSize);
+                    
+                    // 외곽선
+                    ctx.strokeStyle = `rgba(255, 100, 100, ${0.6 + 0.4 * blink})`;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(tileX - tileSize / 2, tileY - tileSize / 2, tileSize, tileSize);
+                } else if (tile.state === 'active') {
+                    // 대미지: 주황색/노란색 플래시
+                    const t = state.nowMs - tile.damageStartMs;
+                    const damageDur = tile.damageEndMs - tile.damageStartMs;
+                    const progress = Math.min(1, t / damageDur);
+                    const pulse = Math.abs(Math.sin(state.nowMs * 0.025));
+                    
+                    // 배경
+                    ctx.fillStyle = `rgba(255, 100, 0, ${0.6 + 0.4 * pulse})`;
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = 'rgba(255, 150, 0, 0.8)';
+                    ctx.fillRect(tileX - tileSize / 2, tileY - tileSize / 2, tileSize, tileSize);
+                    
+                    // 코어
+                    ctx.fillStyle = `rgba(255, 255, 100, ${0.8 + 0.2 * pulse})`;
+                    ctx.shadowBlur = 0;
+                    ctx.fillRect(tileX - tileSize / 4, tileY - tileSize / 4, tileSize / 2, tileSize / 2);
+                }
+                
+                ctx.restore();
+            }
         }
     }
 
