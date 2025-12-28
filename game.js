@@ -14,6 +14,10 @@ const BOSS_IMG = new Image();            // 보스 이미지
 const COIN_FRONT_IMG = new Image();
 const COIN_45_IMG = new Image();
 const COIN_SIDE_IMG = new Image();
+// 타일 이미지
+const GROUND_IMGS = [new Image(), new Image(), new Image(), new Image(), new Image()]; // ground1~5
+const WALL_IMG = new Image();
+const WALL_BROKE_IMGS = [new Image(), new Image(), new Image()]; // wall_broke1~3
 
 function loadImageWithDebug(img, url, label) {
     return new Promise((resolve, reject) => {
@@ -4324,21 +4328,44 @@ function draw() {
     if (state.mode === 'MAZE') {
         const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
         if (chunk && chunk.brokenWalls) {
+            const cellSize = Math.min(state.view.w, state.view.h) / CONFIG.MAZE_SIZE * 0.9;
+            const offsetX = state.view.w / 2 - (cellSize * CONFIG.MAZE_SIZE) / 2;
+            const offsetY = state.view.h / 2 - (cellSize * CONFIG.MAZE_SIZE) / 2;
+            
+            // 부서진 벽 이미지 사용 가능 여부 확인
+            const useBrokeImages = WALL_BROKE_IMGS[0].complete && WALL_BROKE_IMGS[0].naturalWidth > 0;
+            
             for (const [key, info] of chunk.brokenWalls.entries()) {
                 const [tx, ty] = key.split(',').map(Number);
                 const remain = CONFIG.WALL_REGEN_MS - (state.nowMs - info.time);
                 
-                // 잔해 그리기
-                const color = CONFIG.WALL_LEVELS[(info.val === 100 ? 0 : info.val - 1)]?.color || [100, 100, 100];
-                const alpha = remain < 3000 ? (0.3 + 0.7 * Math.abs(Math.sin(state.nowMs * (0.01 + (3000-remain)*0.00005)))) : 0.4;
-                
                 ctx.save();
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
-                const cellSize = Math.min(state.view.w, state.view.h) / CONFIG.MAZE_SIZE * 0.9;
-                const offsetX = state.view.w / 2 - (cellSize * CONFIG.MAZE_SIZE) / 2;
-                const offsetY = state.view.h / 2 - (cellSize * CONFIG.MAZE_SIZE) / 2;
-                ctx.fillRect(offsetX + tx * cellSize + cellSize*0.2, offsetY + ty * cellSize + cellSize*0.2, cellSize*0.6, cellSize*0.6);
+                
+                if (useBrokeImages) {
+                    // 부서진 벽 이미지 랜덤 선택
+                    const brokeIdx = (tx * 31 + ty * 17) % WALL_BROKE_IMGS.length;
+                    const brokeImg = WALL_BROKE_IMGS[brokeIdx];
+                    if (brokeImg.complete && brokeImg.naturalWidth > 0) {
+                        const alpha = remain < 3000 ? (0.3 + 0.7 * Math.abs(Math.sin(state.nowMs * (0.01 + (3000-remain)*0.00005)))) : 0.4;
+                        ctx.globalAlpha = alpha;
+                        ctx.drawImage(brokeImg, offsetX + tx * cellSize, offsetY + ty * cellSize, cellSize, cellSize);
+                    } else {
+                        // 폴백: 기존 방식
+                        const color = CONFIG.WALL_LEVELS[(info.val === 100 ? 0 : info.val - 1)]?.color || [100, 100, 100];
+                        const alpha = remain < 3000 ? (0.3 + 0.7 * Math.abs(Math.sin(state.nowMs * (0.01 + (3000-remain)*0.00005)))) : 0.4;
+                        ctx.globalAlpha = alpha;
+                        ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+                        ctx.fillRect(offsetX + tx * cellSize + cellSize*0.2, offsetY + ty * cellSize + cellSize*0.2, cellSize*0.6, cellSize*0.6);
+                    }
+                } else {
+                    // 폴백: 기존 방식
+                    const color = CONFIG.WALL_LEVELS[(info.val === 100 ? 0 : info.val - 1)]?.color || [100, 100, 100];
+                    const alpha = remain < 3000 ? (0.3 + 0.7 * Math.abs(Math.sin(state.nowMs * (0.01 + (3000-remain)*0.00005)))) : 0.4;
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+                    ctx.fillRect(offsetX + tx * cellSize + cellSize*0.2, offsetY + ty * cellSize + cellSize*0.2, cellSize*0.6, cellSize*0.6);
+                }
+                
                 ctx.restore();
             }
         }
