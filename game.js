@@ -278,7 +278,10 @@ const state = {
         lastContextCheckMs: 0,
         wallRub: {
             src: 'resource/bench-grinder-for-chainsaw-37683.mp3',
-            el: null,
+            el: null, // 레거시 호환성 (WebAudio로 전환 중)
+            buffer: null, // WebAudio AudioBuffer
+            sourceNode: null, // 현재 재생 중인 BufferSource
+            gainNode: null, // 볼륨 제어용 GainNode
             playing: false,
             // 페이드 상태
             fadeMode: 'none', // 'none' | 'in' | 'out'
@@ -296,9 +299,9 @@ const state = {
             rateSmoothing: 0.18,  // 0..1 (클수록 더 빨리 따라감)
             rateTarget: 1.0,
             rateCurrent: 1.0,
-            // 모바일 최적화: BGM 일시 정지 상태 추적
-            bgmWasPaused: false,
-            bgmOriginalVolume: 0.35,
+            // WebAudio 루프 추적
+            loopStartTime: 0, // 현재 루프 시작 시간 (AudioContext.currentTime 기준)
+            loopEndTime: 0, // 현재 루프 종료 시간
 
         },
         wallRubContactThisFrame: false,
@@ -5159,6 +5162,21 @@ function cleanup() {
         rafId = null;
     }
     // 오디오 정리
+    // WebAudio wallRub 정리
+    if (state.audio?.wallRub?.sourceNode) {
+        try {
+            state.audio.wallRub.sourceNode.stop();
+            state.audio.wallRub.sourceNode.disconnect();
+        } catch {}
+        state.audio.wallRub.sourceNode = null;
+    }
+    if (state.audio?.wallRub?.gainNode) {
+        try {
+            state.audio.wallRub.gainNode.disconnect();
+        } catch {}
+        state.audio.wallRub.gainNode = null;
+    }
+    // 레거시 Audio 엘리먼트 정리
     if (state.audio?.wallRub?.el) {
         try {
             state.audio.wallRub.el.pause();

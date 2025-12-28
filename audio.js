@@ -2,60 +2,39 @@
 // (벽 마찰 SFX / 일반 SFX(WebAudio) / BGM)
 // 주의: 실제로 사용되는 시점엔 game.js의 state가 존재해야 합니다.
 
-// --- 오디오: 벽 마찰(부딪침) 사운드 ---
+// --- 오디오: 벽 마찰(부딪침) 사운드 (WebAudio API 사용) ---
+async function loadWallRubBuffer() {
+    const wr = state.audio.wallRub;
+    if (wr.buffer) return wr.buffer;
+    
+    const ctx = ensureSfxContext();
+    if (!ctx) return null;
+    
+    // file:// 프로토콜 또는 origin이 null인 경우 fetch가 제한되므로 null 반환
+    const isLocal = location.protocol === 'file:' || location.origin === 'null' || !location.origin || location.protocol === 'about:';
+    if (isLocal) return null;
+    
+    try {
+        const res = await fetch(wr.src);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const arr = await res.arrayBuffer();
+        const buf = await ctx.decodeAudioData(arr);
+        wr.buffer = buf;
+        return buf;
+    } catch (e) {
+        try { console.warn('[wallRub] buffer load failed', e); } catch { /* ignore */ }
+        return null;
+    }
+}
+
 function ensureWallRubAudioElement() {
+    // 레거시 호환성: 일부 코드에서 여전히 el을 참조할 수 있음
     const wr = state.audio.wallRub;
     if (wr.el) return wr.el;
-    const el = new Audio(wr.src);
-    // 끝 2초를 스킵해야 하므로 loop는 수동 처리
-    el.loop = false;
-    el.preload = 'auto';
-    el.muted = false;
-    el.volume = 0;
-    // playbackRate로 피치를 올릴 수 있게(브라우저별 preservesPitch 옵션 OFF)
-    try { el.preservesPitch = false; } catch { /* ignore */ }
-    try { el.mozPreservesPitch = false; } catch { /* ignore */ }
-    try { el.webkitPreservesPitch = false; } catch { /* ignore */ }
-
-    // 모바일 최적화: timeupdate 이벤트로 더 정확한 루프 처리
-    el.addEventListener('timeupdate', () => {
-        if (!wr.playing) return;
-        const dur = el.duration;
-        const pad = Math.max(0, wr.tailSkipSec || 0);
-        if (Number.isFinite(dur) && dur > pad + 0.1) {
-            const loopEnd = dur - pad;
-            const currentTime = el.currentTime || 0;
-            // 모바일: 끝부분에 가까워지면 미리 되감기
-            if (currentTime >= loopEnd - 0.15) {
-                try {
-                    el.currentTime = 0;
-                    // 재생이 멈췄을 수 있으므로 재생 확인
-                    if (el.paused) {
-                        const p = el.play();
-                        if (p && typeof p.catch === 'function') p.catch(() => {});
-                    }
-                } catch {}
-            }
-        }
-    }, { passive: true });
-
-    // 모바일 최적화: ended 이벤트로 재생이 끝났을 때 즉시 재시작
-    el.addEventListener('ended', () => {
-        if (wr.playing) {
-            try {
-                el.currentTime = 0;
-                const p = el.play();
-                if (p && typeof p.catch === 'function') p.catch(() => {});
-            } catch {}
-        }
-    }, { passive: true });
-
-    // 디버깅에 도움되는 에러 로그(문제 발생 시 콘솔에서 원인 확인 가능)
-    el.addEventListener('error', () => {
-        try { console.warn('[wallRub] audio error', el.error, wr.src); } catch { /* ignore */ }
-    });
-    wr.el = el;
-    return el;
+    // WebAudio를 사용하므로 더 이상 Audio 엘리먼트를 생성하지 않음
+    // 하지만 호환성을 위해 더미 객체 반환
+    wr.el = { paused: true, volume: 0, currentTime: 0, duration: 0 };
+    return wr.el;
 }
 
 function ensureSfxContext() {
@@ -365,32 +344,50 @@ function unlockAudioOnce() {
             loadSfxBuffer(src).catch(() => {});
         });
         
+        // wallRub WebAudio 버퍼도 미리 로드
+        loadWallRubBuffer().catch(() => {});
+        
         // 상점 BGM 예열
         new Audio('resource/cute-level-up-2-189851.mp3').preload = 'auto';
         
         // BGM도 유저 제스처 이후 시작
         startBgmIfNeeded();
         
-        // 유저 제스처에서 "실제 play 성공"해야만 unlocked로 인정 (실패 시 다음 입력에서 재시도)
-        el.volume = 0;
-        const p = el.play();
-        if (p && typeof p.then === 'function') {
-            p.then(() => {
+        // WebAudio 사용 시 AudioContext resume으로 정책 통과
+        if (ctx) {
+            const rp = ctx.resume();
+            if (rp && typeof rp.then === 'function') {
+                rp.then(() => {
+                    state.audio.unlocked = true;
+                    // 모바일: AudioContext가 다시 suspended 될 수 있으므로 주기적으로 체크
+                    if (ctx.state === 'suspended') {
+                        ctx.resume().catch(() => {});
+                    }
+                }).catch((err) => {
+                    try { console.warn('[audio] unlock failed', err); } catch { /* ignore */ }
+                    state.audio.unlocked = false;
+                });
+            } else {
+                // Promise가 없는 환경이면 일단 unlocked 처리
+                state.audio.unlocked = true;
+            }
+        } else {
+            // WebAudio가 없으면 레거시 방식 (Audio 엘리먼트)
+            const el = ensureWallRubAudioElement();
+            el.volume = 0;
+            const p = el.play();
+            if (p && typeof p.then === 'function') {
+                p.then(() => {
+                    state.audio.unlocked = true;
+                    state.audio.wallRub.playing = true;
+                }).catch((err) => {
+                    try { console.warn('[audio] unlock failed', err); } catch { /* ignore */ }
+                    state.audio.unlocked = false;
+                });
+            } else {
                 state.audio.unlocked = true;
                 state.audio.wallRub.playing = true;
-                // 모바일: AudioContext가 다시 suspended 될 수 있으므로 주기적으로 체크
-                if (ctx && ctx.state === 'suspended') {
-                    ctx.resume().catch(() => {});
-                }
-                // 여기서는 바로 끄지 않고 0볼륨으로 유지(정책 회피 + 즉시 페이드인 가능)
-            }).catch((err) => {
-                try { console.warn('[audio] unlock failed', err); } catch { /* ignore */ }
-                state.audio.unlocked = false;
-            });
-        } else {
-            // Promise가 없는 환경이면 일단 unlocked 처리
-            state.audio.unlocked = true;
-            state.audio.wallRub.playing = true;
+            }
         }
     } catch (err) {
         try { console.warn('[audio] unlock exception', err); } catch { /* ignore */ }
@@ -400,8 +397,8 @@ function unlockAudioOnce() {
 
 function startWallRubFade(mode, toVol, durMs) {
     const wr = state.audio.wallRub;
-    const el = ensureWallRubAudioElement();
-    const from = Math.max(0, Math.min(1, el.volume || 0));
+    // WebAudio: GainNode의 gain.value에서 현재 볼륨 가져오기
+    const from = wr.gainNode ? Math.max(0, Math.min(1, wr.gainNode.gain.value || 0)) : 0;
     wr.fadeMode = mode;
     wr.fadeStartMs = state.nowMs;
     wr.fadeDurMs = durMs;
@@ -411,6 +408,50 @@ function startWallRubFade(mode, toVol, durMs) {
 
 function tickWallRubAudio(nowMs) {
     const wr = state.audio.wallRub;
+    const ctx = ensureSfxContext();
+    
+    // WebAudio 사용 시
+    if (ctx && wr.buffer) {
+        // WebAudio: 루프 체크 및 재생
+        if (wr.playing && wr.sourceNode) {
+            // 피치(=playbackRate) 스무딩 적용
+            const s = Math.max(0, Math.min(1, wr.rateSmoothing ?? 0.18));
+            wr.rateCurrent = (wr.rateCurrent ?? 1) + ((wr.rateTarget ?? 1) - (wr.rateCurrent ?? 1)) * s;
+            const pr = Math.max(0.5, Math.min(2.0, wr.rateCurrent));
+            if (wr.sourceNode && wr.sourceNode.playbackRate.value !== pr) {
+                try { wr.sourceNode.playbackRate.value = pr; } catch { /* ignore */ }
+            }
+        }
+
+        // 페이드 진행
+        if (wr.fadeMode !== 'none' && wr.gainNode) {
+            const tRaw = (nowMs - wr.fadeStartMs) / (wr.fadeDurMs || 1);
+            // easeInOutCubic는 game.js에 정의(호출 시점에는 항상 존재)
+            const t = easeInOutCubic(tRaw);
+            const targetGain = wr.fadeFrom + (wr.fadeTo - wr.fadeFrom) * t;
+            wr.gainNode.gain.value = Math.max(0, Math.min(1, targetGain));
+            
+            if (tRaw >= 1) {
+                wr.gainNode.gain.value = wr.fadeTo;
+                const endedMode = wr.fadeMode;
+                wr.fadeMode = 'none';
+                if (endedMode === 'out' && wr.gainNode.gain.value <= 0.0001) {
+                    // 재생 정지
+                    if (wr.sourceNode) {
+                        try {
+                            wr.sourceNode.stop();
+                            wr.sourceNode.disconnect();
+                        } catch {}
+                        wr.sourceNode = null;
+                    }
+                    wr.playing = false;
+                }
+            }
+        }
+        return; // WebAudio 사용 시 여기서 종료
+    }
+    
+    // 레거시: Audio 엘리먼트 사용 (WebAudio가 없는 경우)
     const el = wr.el;
     if (!el) return;
 
@@ -471,7 +512,94 @@ function setWallRubContact(isContact, intensity = 1) {
     const wr = state.audio.wallRub;
     // 모바일 최적화: unlocked 대신 gestureUnlocked 체크 (마찰소리는 제스처만 있으면 재생 가능)
     if (!state.audio.gestureUnlocked) return;
+    
+    const ctx = ensureSfxContext();
+    
+    // WebAudio 사용 시
+    if (ctx && wr.buffer) {
+        if (isContact) {
+            // 강도에 따라 볼륨 스케일
+            const k = Math.max(0, Math.min(1, intensity));
+            const target = wr.baseVolume * (0.20 + 0.80 * k);
+            // 강도에 따라 피치(살짝 상승)
+            wr.rateTarget = (wr.rateBase ?? 1.0) + (wr.rateMaxUp ?? 0.12) * k;
+
+            // WebAudio: 필요하면 재생 시작
+            if (!wr.playing) {
+                const srcNode = ctx.createBufferSource();
+                srcNode.buffer = wr.buffer;
+                srcNode.playbackRate.value = Math.max(0.5, Math.min(2.0, wr.rateTarget));
+                
+                const gain = ctx.createGain();
+                gain.gain.value = 0; // 시작 시 볼륨 0
+                wr.gainNode = gain;
+                
+                srcNode.connect(gain);
+                gain.connect(ctx.destination);
+                
+                const dur = wr.buffer.duration;
+                const pad = Math.max(0, wr.tailSkipSec || 0);
+                const loopEnd = dur - pad;
+                const startTime = ctx.currentTime;
+                
+                srcNode.start(startTime);
+                srcNode.stop(startTime + loopEnd);
+                
+                wr.sourceNode = srcNode;
+                wr.playing = true;
+                wr.rateCurrent = wr.rateTarget;
+                wr.loopStartTime = startTime;
+                wr.loopEndTime = startTime + loopEnd;
+                
+                // 루프 종료 시 재시작 (재귀적으로 루프)
+                const createNextLoop = () => {
+                    if (!wr.playing || !wr.buffer) return;
+                    const nextTime = ctx.currentTime;
+                    const nextSrc = ctx.createBufferSource();
+                    nextSrc.buffer = wr.buffer;
+                    nextSrc.playbackRate.value = Math.max(0.5, Math.min(2.0, wr.rateCurrent || 1.0));
+                    nextSrc.connect(gain);
+                    nextSrc.start(nextTime);
+                    nextSrc.stop(nextTime + loopEnd);
+                    wr.sourceNode = nextSrc;
+                    wr.loopStartTime = nextTime;
+                    wr.loopEndTime = nextTime + loopEnd;
+                    nextSrc.onended = createNextLoop;
+                };
+                srcNode.onended = createNextLoop;
+            }
+
+            // 페이드아웃 중 재접촉: 디졸브 취소
+            if (wr.fadeMode === 'out') wr.fadeMode = 'none';
+
+            // 매 프레임 페이드를 "재시작"하면 볼륨이 0 근처에서 계속 리셋될 수 있으므로,
+            // 볼륨/상태가 바뀌는 순간에만 페이드인 트리거.
+            const eps = 0.02;
+            const currentGain = wr.gainNode ? wr.gainNode.gain.value : 0;
+            if (wr.fadeMode !== 'in') {
+                if (currentGain < target - eps) {
+                    startWallRubFade('in', target, 90);
+                } else if (wr.gainNode) {
+                    wr.gainNode.gain.value = target;
+                }
+            } else {
+                // 이미 페이드인 중이면 목표만 상향(더 세게 문댈 때)
+                if (wr.fadeTo < target) wr.fadeTo = target;
+            }
+        } else {
+            // 접촉 해제 시 피치를 기본으로 복귀(페이드아웃 중에도 천천히 내려감)
+            wr.rateTarget = (wr.rateBase ?? 1.0);
+            // 떨어졌으면 페이드아웃 후 정지
+            if (wr.playing && wr.fadeMode !== 'out') {
+                startWallRubFade('out', 0, wr.fadeDurMs || 100);
+            }
+        }
+        return; // WebAudio 사용 시 여기서 종료
+    }
+    
+    // 레거시: Audio 엘리먼트 사용 (WebAudio가 없는 경우)
     const el = ensureWallRubAudioElement();
+    if (!el) return;
 
     if (isContact) {
         // 강도에 따라 볼륨 스케일
@@ -479,18 +607,6 @@ function setWallRubContact(isContact, intensity = 1) {
         const target = wr.baseVolume * (0.20 + 0.80 * k);
         // 강도에 따라 피치(살짝 상승)
         wr.rateTarget = (wr.rateBase ?? 1.0) + (wr.rateMaxUp ?? 0.12) * k;
-
-        // 모바일 최적화: iOS Safari는 한 번에 하나의 Audio 엘리먼트만 재생 가능
-        // wallRub 재생 시 BGM을 일시적으로 멈춤 (충돌 방지)
-        const bgm = state.audio.bgm;
-        if (bgm?.el && !bgm.el.paused) {
-            // BGM 일시 정지 및 원래 볼륨 저장
-            if (!wr.bgmWasPaused) {
-                wr.bgmWasPaused = true;
-                wr.bgmOriginalVolume = bgm.el.volume || bgm.volume || 0.35;
-                bgm.el.pause();
-            }
-        }
 
         // 필요하면 재생 시작(처음 접촉 시에만 currentTime 리셋)
         if (!wr.playing) {
@@ -526,27 +642,9 @@ function setWallRubContact(isContact, intensity = 1) {
     } else {
         // 접촉 해제 시 피치를 기본으로 복귀(페이드아웃 중에도 천천히 내려감)
         wr.rateTarget = (wr.rateBase ?? 1.0);
-        // 떨어졌으면 0.5초 디졸브(페이드아웃) 후 정지
+        // 떨어졌으면 페이드아웃 후 정지
         if (wr.playing && wr.fadeMode !== 'out') {
             startWallRubFade('out', 0, wr.fadeDurMs || 100);
-        }
-        
-        // 모바일 최적화: wallRub가 멈추면 BGM 재개
-        if (wr.bgmWasPaused) {
-            const bgm = state.audio.bgm;
-            if (bgm?.el && bgm.el.paused) {
-                // 페이드아웃이 완료된 후 BGM 재개 (0.2초 지연)
-                setTimeout(() => {
-                    if (!wr.playing && bgm.el && bgm.el.paused) {
-                        try {
-                            bgm.el.volume = wr.bgmOriginalVolume || bgm.volume || 0.35;
-                            const p = bgm.el.play();
-                            if (p && typeof p.catch === 'function') p.catch(() => {});
-                        } catch {}
-                        wr.bgmWasPaused = false;
-                    }
-                }, 200);
-            }
         }
     }
 }
