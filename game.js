@@ -3331,9 +3331,9 @@ function updateChaser(dt) {
     const moveDist = speed * dtSec;
 
     // 플레이어가 추격자와 같은 청크에 있으면 플레이어 위치를 타겟으로, 아니면 추격자 청크의 중앙을 타겟으로
-    const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.currentChunk.y === state.chaser.chunk.y;
+    const isPlayerInChaserChunkForPath = state.currentChunk.x === state.chaser.chunk.x && state.currentChunk.y === state.chaser.chunk.y;
     let targetTile;
-    if (isPlayerInChaserChunk) {
+    if (isPlayerInChaserChunkForPath) {
         // 같은 청크에 있으면 플레이어를 추적
         targetTile = { x: Math.floor(state.player.mazePos.x), y: Math.floor(state.player.mazePos.y) };
     } else {
