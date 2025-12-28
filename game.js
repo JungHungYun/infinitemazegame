@@ -4237,17 +4237,8 @@ function checkExits() {
     // 중심 좌표 기준: 유효 영역은 (0~size)이며 타일 중심은 0.5~size-0.5
     if (p.y < 0) exitMaze(0, 1); // North (Y 증가가 북쪽)
     else if (p.y > CONFIG.MAZE_SIZE) {
-        // 첫 번째 행(y=0)에서 시작 청크 외에는 남쪽으로 내려갈 수 없음(아래 막힘)
-        if (
-            state.currentChunk.y === 0 &&
-            !(state.currentChunk.x === CONFIG.START_CHUNK_X && state.currentChunk.y === CONFIG.START_CHUNK_Y)
-        ) {
-            state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
-        } else {
-            // 시작 청크의 남쪽은 "외부 시작점" 개념이라 실제로 아래 청크로 이동은 금지
-            // (dy=-1로 나가면 y가 0으로 clamp되어 같은 청크로 다시 들어가 버릴 수 있음)
-            state.player.mazePos.y = CONFIG.MAZE_SIZE - 0.5;
-        }
+        // 남쪽(아래)로 이동 가능
+        exitMaze(0, -1); // South (Y 감소가 남쪽)
     }
     else if (p.x < 0) {
         // 맨 왼쪽 청크는 서쪽 막힘
