@@ -3351,19 +3351,23 @@ function updateChaser(dt) {
         // 같은 청크에 있으면 플레이어를 추적
         targetTile = { x: Math.floor(state.player.mazePos.x), y: Math.floor(state.player.mazePos.y) };
     } else {
-        // 다른 청크에 있으면 플레이어가 있는 방향으로 이동 (청크 경계로 이동)
+        // 다른 청크에 있으면 플레이어가 있는 방향의 출구로 이동
+        // 추적자는 플레이어를 따라가기 위해 플레이어 방향의 출구로 이동
         const dx = state.currentChunk.x - state.chaser.chunk.x;
         const dy = state.currentChunk.y - state.chaser.chunk.y;
-        // 추격자 청크의 플레이어 방향 가장자리로 이동
+        // 추격자 청크의 플레이어 방향 가장자리(출구)로 이동
         const size = CONFIG.MAZE_SIZE;
         if (Math.abs(dx) > Math.abs(dy)) {
             // X 방향 차이가 더 큼
-            if (dx > 0) targetTile = { x: size - 1, y: Math.floor(size / 2) }; // 동쪽 가장자리
-            else targetTile = { x: 0, y: Math.floor(size / 2) }; // 서쪽 가장자리
-        } else {
+            if (dx > 0) targetTile = { x: size - 1, y: Math.floor(size / 2) }; // 동쪽 출구
+            else targetTile = { x: 0, y: Math.floor(size / 2) }; // 서쪽 출구
+        } else if (dy !== 0) {
             // Y 방향 차이가 더 큼
-            if (dy > 0) targetTile = { x: Math.floor(size / 2), y: size - 1 }; // 북쪽 가장자리
-            else targetTile = { x: Math.floor(size / 2), y: 0 }; // 남쪽 가장자리
+            if (dy > 0) targetTile = { x: Math.floor(size / 2), y: size - 1 }; // 북쪽 출구
+            else targetTile = { x: Math.floor(size / 2), y: 0 }; // 남쪽 출구
+        } else {
+            // dx와 dy가 모두 0이면 (같은 청크인데 체크를 통과한 경우) 플레이어 위치로
+            targetTile = { x: Math.floor(state.player.mazePos.x), y: Math.floor(state.player.mazePos.y) };
         }
     }
     
