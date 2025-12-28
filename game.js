@@ -981,7 +981,7 @@ function buildChunkMazeTexture(chunk) {
                         g.shadowOffsetX = 2;
                         g.shadowOffsetY = 2;
                         // 명도 감소 (더 어둡게)
-                        g.globalAlpha = 0.5; // 명도 50% 감소
+                        g.globalAlpha = 0.4; // 명도 50% 감소
                         g.drawImage(WALL_IMG, px, py, tile, tile);
                         g.restore();
                     }
