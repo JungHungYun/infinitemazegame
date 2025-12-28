@@ -3420,9 +3420,7 @@ function updateChaser(dt) {
     const moveDist = speed * dtSec;
 
     // 플레이어와 같은 청크에 있으면 플레이어를 직접 추적
-    const isPlayerInChaserChunkForPath = state.currentChunk.x === state.chaser.chunk.x && state.currentChunk.y === state.chaser.chunk.y;
-    
-    if (isPlayerInChaserChunkForPath) {
+    if (isPlayerInChaserChunk) {
         // 같은 청크에 있으면 플레이어를 추적
         const targetTile = { x: Math.floor(state.player.mazePos.x), y: Math.floor(state.player.mazePos.y) };
         const chaserTile = { x: Math.floor(state.chaser.pos.x), y: Math.floor(state.chaser.pos.y) };
