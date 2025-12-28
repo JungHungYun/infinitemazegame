@@ -3435,14 +3435,9 @@ function updateChaser(dt) {
         const dx = state.currentChunk.x - state.chaser.chunk.x;
         const dy = state.currentChunk.y - state.chaser.chunk.y;
         
-        // 출구 방향과 플레이어 방향이 일치하는지 확인
-        let shouldExit = false;
-        if (exitDir === 'W' && dx < 0) shouldExit = true; // 서쪽 출구, 플레이어는 서쪽에
-        else if (exitDir === 'E' && dx > 0) shouldExit = true; // 동쪽 출구, 플레이어는 동쪽에
-        else if (exitDir === 'S' && dy < 0) shouldExit = true; // 남쪽 출구, 플레이어는 남쪽에
-        else if (exitDir === 'N' && dy > 0) shouldExit = true; // 북쪽 출구, 플레이어는 북쪽에
-        
-        if (shouldExit) {
+        // 추격자가 경계에 도달했고 플레이어와 다른 청크에 있으면 무조건 이동
+        // (출구 방향과 플레이어 방향이 일치하는지 확인하지 않고 바로 이동)
+        if (dx !== 0 || dy !== 0) {
             // 추격자가 플레이어 청크로 이동
             state.chaser.chunk.x = state.currentChunk.x;
             state.chaser.chunk.y = state.currentChunk.y;
