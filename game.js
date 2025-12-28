@@ -973,17 +973,23 @@ function buildChunkMazeTexture(chunk) {
                         const v = gunpowderWallVariants[(x * 31 + y * 17) % gunpowderWallVariants.length];
                         g.drawImage(v, px, py, tile, tile);
                     } else {
-                        // 일반 벽은 이미지 사용 (명도 30% 감소)
+                        // 일반 벽은 이미지 사용 (명도 감소 + 그림자 효과)
                         g.save();
-                        g.globalAlpha = 0.7; // 명도 30% 감소
+                        // 그림자 효과 (벽 가장자리)
+                        g.shadowBlur = 8;
+                        g.shadowColor = 'rgba(0, 0, 0, 0.6)';
+                        g.shadowOffsetX = 2;
+                        g.shadowOffsetY = 2;
+                        // 명도 감소 (더 어둡게)
+                        g.globalAlpha = 0.6; // 명도 40% 감소
                         g.drawImage(WALL_IMG, px, py, tile, tile);
                         g.restore();
                     }
                 } else {
-                    // 바닥 이미지 랜덤 선택 (청크마다 다른 패턴)
-                    // 청크 좌표를 시드로 사용하여 청크마다 다른 배치
-                    const chunkSeed = hashStringToUint(`ground:${chunk.x},${chunk.y}`);
-                    const groundIdx = ((x * 31 + y * 17) ^ chunkSeed) % GROUND_IMGS.length;
+                    // 바닥 이미지 무작위 선택 (청크마다 다른 패턴, 더 무작위)
+                    // mulberry32 RNG를 사용하여 더 자연스러운 무작위 배치
+                    const groundRng = mulberry32(hashStringToUint(`ground:${chunk.x},${chunk.y},${x},${y}`));
+                    const groundIdx = Math.floor(groundRng() * GROUND_IMGS.length);
                     const groundImg = GROUND_IMGS[groundIdx];
                     if (groundImg.complete && groundImg.naturalWidth > 0) {
                         g.drawImage(groundImg, px, py, tile, tile);
@@ -1017,14 +1023,14 @@ function buildChunkMazeTexture(chunk) {
                 g.drawImage(v, px, py, tile, tile);
             }
 
-            // 바닥은 약간 밝게, 벽은 약간 더 어둡게 추가 보정(명도차 강화)
+            // 바닥은 더 밝게, 벽은 더 어둡게 추가 보정(명도차 강화)
             if (!isWall) {
-                g.globalAlpha = 0.08;
+                g.globalAlpha = 0.15; // 밝게 보정 강화
                 g.fillStyle = 'rgba(255,255,255,1)';
                 g.fillRect(px, py, tile, tile);
                 g.globalAlpha = 1;
             } else {
-                g.globalAlpha = 0.10;
+                g.globalAlpha = 0.20; // 어둡게 보정 강화
                 g.fillStyle = 'rgba(0,0,0,1)';
                 g.fillRect(px, py, tile, tile);
                 g.globalAlpha = 1;
