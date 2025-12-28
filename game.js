@@ -3297,7 +3297,7 @@ function updateChaser(dt) {
     if (state.chaser.deadUntilNextChunk) return;
 
     // 플레이어와 같은 청크에 있는지 확인
-    const isPlayerInChaserChunk = state.currentChunk.x === state.chaser.chunk.x && state.chaser.chunk.y === state.currentChunk.y;
+    // isPlayerInChaserChunk already declared above (line 3300)
     
     // 청크 진입 연출: 플레이어와 같은 청크에 있을 때만 입구 진입 연출 처리
     if (!state.chaser.isPresentInMaze && isPlayerInChaserChunk) {
