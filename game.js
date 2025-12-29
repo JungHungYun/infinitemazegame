@@ -574,7 +574,7 @@ function drawGunpowderIcon(ctx, x, y, r, alpha = 1) {
 // "오프스크린 스프라이트(캐시)"를 1회 생성 후 drawImage로만 그립니다.
 const PLAYER_SPRITE_CACHE = new Map(); // key -> { c, w, h, pad }
 
-function buildPlayerOrbSprite(radiusPx, quality = 'mid') {
+function buildPlayerOrbSprite(radiusPx, quality = 'mid', skinColor = '#00ffff') {
     const r = Math.max(2, radiusPx);
     // quality에 따라 비용(선 수/샘플)을 조정
     const q = (quality === 'low') ? 0 : (quality === 'high' ? 2 : 1);
@@ -595,7 +595,18 @@ function buildPlayerOrbSprite(radiusPx, quality = 'mid') {
 
     // 랜덤(하지만 고정된) 흔들림을 위해 seed 사용
     const rng = mulberry32(0xC0FFEE ^ (Math.floor(r) * 2654435761) ^ (q * 97531));
-    const baseColor = '#00ffff';
+    const baseColor = skinColor;
+    
+    // 색상을 RGB로 변환하여 그라데이션 생성
+    const hexToRgb = (hex) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : { r: 0, g: 255, b: 255 };
+    };
+    const rgb = hexToRgb(baseColor);
 
     g.save();
     g.translate(size / 2, size / 2);
@@ -606,9 +617,9 @@ function buildPlayerOrbSprite(radiusPx, quality = 'mid') {
     g.shadowColor = baseColor;
     const core = g.createRadialGradient(0, 0, r * 0.05, 0, 0, r * 1.25);
     core.addColorStop(0.00, 'rgba(255,255,255,0.98)');
-    core.addColorStop(0.12, 'rgba(160,240,255,0.80)');
-    core.addColorStop(0.35, 'rgba(0,220,255,0.35)');
-    core.addColorStop(1.00, 'rgba(0,220,255,0.00)');
+    core.addColorStop(0.12, `rgba(${Math.min(255, rgb.r + 100)},${Math.min(255, rgb.g + 100)},${Math.min(255, rgb.b + 100)},0.80)`);
+    core.addColorStop(0.35, `rgba(${rgb.r},${rgb.g},${rgb.b},0.35)`);
+    core.addColorStop(1.00, `rgba(${rgb.r},${rgb.g},${rgb.b},0.00)`);
     g.fillStyle = core;
     g.beginPath();
     g.arc(0, 0, r * 1.25, 0, Math.PI * 2);
@@ -633,7 +644,7 @@ function buildPlayerOrbSprite(radiusPx, quality = 'mid') {
         const a = r * (0.78 + 0.26 * rng());
         const b = r * (0.52 + 0.30 * rng());
         const alpha = 0.11 + 0.10 * rng();
-        g.strokeStyle = `rgba(180, 245, 255, ${alpha})`;
+        g.strokeStyle = `rgba(${Math.min(255, rgb.r + 100)},${Math.min(255, rgb.g + 100)},${Math.min(255, rgb.b + 100)},${alpha})`;
 
         g.save();
         g.rotate(tilt);
@@ -653,7 +664,7 @@ function buildPlayerOrbSprite(radiusPx, quality = 'mid') {
 
     // 외곽 링
     g.shadowBlur = glow * 1.05;
-    g.strokeStyle = 'rgba(0, 220, 255, 0.18)';
+    g.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.18)`;
     g.lineWidth = Math.max(1.2, lineWidth * 1.05);
     g.beginPath();
     g.arc(0, 0, r * 1.03, 0, Math.PI * 2);
@@ -669,7 +680,7 @@ function buildPlayerOrbSprite(radiusPx, quality = 'mid') {
         const a2 = rr * (1.12 + 0.25 * rng());
         const b2 = rr * (0.82 + 0.25 * rng());
         const alpha = 0.08 + 0.08 * rng();
-        g.strokeStyle = `rgba(120, 220, 255, ${alpha})`;
+        g.strokeStyle = `rgba(${Math.min(255, rgb.r + 50)},${Math.min(255, rgb.g + 50)},${Math.min(255, rgb.b + 50)},${alpha})`;
 
         g.save();
         g.rotate(ph * (0.5 + 0.3 * rng()));
@@ -692,12 +703,12 @@ function buildPlayerOrbSprite(radiusPx, quality = 'mid') {
     return { c, w: size, h: size, pad };
 }
 
-function getPlayerOrbSprite(radiusPx, quality) {
+function getPlayerOrbSprite(radiusPx, quality, skinColor = '#00ffff') {
     const rKey = Math.max(2, Math.round(radiusPx)); // 캐시 키 안정화(미세 변화로 폭발 방지)
-    const key = `${rKey}:${quality}`;
+    const key = `${rKey}:${quality}:${skinColor}`;
     const hit = PLAYER_SPRITE_CACHE.get(key);
     if (hit) return hit;
-    const built = buildPlayerOrbSprite(rKey, quality);
+    const built = buildPlayerOrbSprite(rKey, quality, skinColor);
     PLAYER_SPRITE_CACHE.set(key, built);
     return built;
 }
@@ -708,8 +719,13 @@ function drawSpiralPlayer(ctx, x, y, radiusPx, timeMs, opts = {}) {
     const spin = (typeof opts.spin === 'number') ? opts.spin : 0.0014;
     const rot = timeMs * spin;
     const pulse = 0.92 + 0.08 * Math.sin(timeMs * 0.006);
+    
+    // 선택된 스킨 색상 가져오기
+    const selectedSkinId = state.player?.selectedSkin || 'default';
+    const skin = CONFIG.CHARACTER_SKINS.find(s => s.id === selectedSkinId) || CONFIG.CHARACTER_SKINS[0];
+    const skinColor = skin?.color || '#00ffff';
 
-    const spr = getPlayerOrbSprite(radiusPx, quality);
+    const spr = getPlayerOrbSprite(radiusPx, quality, skinColor);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot);
@@ -1926,6 +1942,12 @@ function initTitleScreenUI() {
     
     const startGame = async () => {
         if (state.ui.started) return;
+        
+        // 기본 스킨 설정 (선택되지 않았을 경우)
+        if (!state.player.selectedSkin) {
+            state.player.selectedSkin = 'default';
+        }
+        
         // 이미지가 반영되지 않는 문제 방지: 시작 전에 프리로드를 1회 기다림
         if (btn) {
             btn.disabled = true;

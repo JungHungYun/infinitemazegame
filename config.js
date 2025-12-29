@@ -82,8 +82,9 @@ const CONFIG = {
 
     // 캐릭터 스킨 설정
     CHARACTER_SKINS: [
-        { id: 'default', name: '기본', unlocked: true },
-        // 추가 스킨은 나중에 구현
+        { id: 'default', name: '기본', color: '#00ffff', unlocked: true },
+        { id: 'yellow', name: '노란색', color: '#ffff00', unlocked: true },
+        { id: 'green', name: '초록색', color: '#00ff00', unlocked: true },
     ],
 
     DEBUG: false, // 디버그 모드 (true 설정 시 벽부수기 해제, 코인/미사일 1000개 시작)

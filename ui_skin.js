@@ -33,6 +33,68 @@ function closeSkinSelectModal() {
 window.openSkinSelectModal = openSkinSelectModal;
 window.closeSkinSelectModal = closeSkinSelectModal;
 
+// 스킨 미리보기 이미지 생성 함수
+function createSkinPreview(skinColor) {
+    const canvas = document.createElement('canvas');
+    const size = 80;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    
+    // buildPlayerOrbSprite와 유사한 방식으로 미리보기 생성
+    const r = size * 0.3;
+    const pad = 10;
+    const centerX = size / 2;
+    const centerY = size / 2;
+    
+    // 색상을 RGB로 변환
+    const hexToRgb = (hex) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : { r: 0, g: 255, b: 255 };
+    };
+    const rgb = hexToRgb(skinColor);
+    
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.globalCompositeOperation = 'lighter';
+    
+    // 코어 글로우
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = skinColor;
+    const core = ctx.createRadialGradient(0, 0, r * 0.05, 0, 0, r * 1.25);
+    core.addColorStop(0.00, 'rgba(255,255,255,0.98)');
+    core.addColorStop(0.12, `rgba(${Math.min(255, rgb.r + 100)},${Math.min(255, rgb.g + 100)},${Math.min(255, rgb.b + 100)},0.80)`);
+    core.addColorStop(0.35, `rgba(${rgb.r},${rgb.g},${rgb.b},0.35)`);
+    core.addColorStop(1.00, `rgba(${rgb.r},${rgb.g},${rgb.b},0.00)`);
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.25, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 내부 하얀 코어
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = 'rgba(255,255,255,0.90)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 외곽 링
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.18)`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.03, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.restore();
+    
+    return canvas.toDataURL();
+}
+
 function renderSkinChoices() {
     const container = document.getElementById('skin-choices');
     if (!container) return;
@@ -56,10 +118,16 @@ function renderSkinChoices() {
         const card = document.createElement('div');
         card.className = `ability-card-item ${isSelected ? 'selected' : ''} ${!isUnlocked ? 'locked' : ''}`;
         
+        // 스킨 미리보기 이미지 생성
+        const previewImg = skin.color ? createSkinPreview(skin.color) : '';
+        
         card.innerHTML = `
             <div class="ability-card-header">
                 <div class="ability-card-name">${skin.name}</div>
             </div>
+            ${previewImg ? `<div class="skin-preview" style="text-align: center; margin: 10px 0;">
+                <img src="${previewImg}" alt="${skin.name} 미리보기" style="width: 80px; height: 80px; image-rendering: pixelated;">
+            </div>` : ''}
             <div class="ability-card-desc">
                 ${!isUnlocked ? '(잠금 해제 필요)' : ''}
             </div>
