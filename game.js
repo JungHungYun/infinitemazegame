@@ -191,6 +191,7 @@ const state = {
         maxHp: CONFIG.MISSILE_DAMAGE * 5,
     },
     chaserProjectiles: [], // {pos, vel}
+    extraChasers: [], // 추가 추적자들 [{chunk, pos, path, pathIndex, lastRepathMs, lastTargetTile, graceUntilMs, stunUntilMs, lastShotMs, entryScheduledUntilMs, entryScheduledDir, entryScheduledPos, isPresentInMaze, nextEntryDelayMs, caughtCount, speedMult, slowUntilMs, deadUntilNextChunk, respawnTimerMs, bossCooldownUntilMs, hp, maxHp, removeAtMs}]
 
     // 아이템(필드 내 미사일 아이템) - 현재 청크에만 유지
     items: [], // [{ pos:{x,y} }]
@@ -252,6 +253,10 @@ const state = {
         interceptMissileUnlocked: false, // 요격 미사일
         maxLives: 3,
         shieldMax: 0, // 실드 최대치(구매로 증가, 최대 3)
+        playerSizeMult: 1.0, // 플레이어 크기 배수 (1회당 -20% = x0.8, 최대 2회)
+        missileSpeedMult: 1.0, // 미사일 속도 배수 (1회당 +20%, 최대 3회)
+        wallBreakSpeedMult2: 0, // 벽 파괴 속도 추가 배수 (1회당 +30%, 최대 2회)
+        curses: [], // 저주 목록 [{id, name, desc, startMs, durationMs}]
         // 금융 어빌리티
         bankDeposit: { enabled: false, intervalMs: 10000, timerMs: 0 }, // 예금: 10s마다 +1coin, 점점 빨라짐(최소 1s)
         bankSaving: { enabled: false, targetFloors: 5, progress: 0 },   // 적금: N층마다 +10coin, 점점 N 감소(최소 1)
@@ -974,16 +979,29 @@ function buildChunkMazeTexture(chunk) {
                         const v = gunpowderWallVariants[(x * 31 + y * 17) % gunpowderWallVariants.length];
                         g.drawImage(v, px, py, tile, tile);
                     } else {
-                        // 일반 벽은 이미지 사용 (명도 감소 + 그림자 효과)
+                        // 일반 벽은 이미지 사용 (명도 감소 + 그림자 효과 + 레벨별 색상)
                         g.save();
                         // 그림자 효과 (벽 가장자리)
                         g.shadowBlur = 8;
                         g.shadowColor = 'rgba(0, 0, 0, 0.6)';
                         g.shadowOffsetX = 2;
                         g.shadowOffsetY = 2;
-                        // 명도 감소 (더 어둡게)
+                        
+                        // 벽 이미지 그리기
                         g.globalAlpha = 0.5; // 명도 50% 감소
                         g.drawImage(WALL_IMG, px, py, tile, tile);
+                        
+                        // 레벨별 색상 적용 (wallValue - 1이 레벨 인덱스)
+                        const lv = wallValue - 1;
+                        if (lv >= 0 && lv < CONFIG.WALL_LEVELS.length) {
+                            const wallColor = CONFIG.WALL_LEVELS[lv].color;
+                            g.globalCompositeOperation = 'multiply';
+                            g.globalAlpha = 0.6; // 색상 강도
+                            g.fillStyle = `rgb(${wallColor[0]}, ${wallColor[1]}, ${wallColor[2]})`;
+                            g.fillRect(px, py, tile, tile);
+                            g.globalCompositeOperation = 'source-over';
+                        }
+                        
                         g.restore();
                     }
                 } else {
@@ -1315,7 +1333,8 @@ function applyWallRub(chunk, tx, ty, addMs) {
     const key = wallKey(tx, ty);
     const cur = chunk.wallHeat.get(key) || { heatMs: 0, lastMs: state.nowMs };
     // 누적 시간은 (벽부수기 속도 배수)를 적용해 더함
-    cur.heatMs = Math.min(targetBreakMs * 1.2, cur.heatMs + addMs * state.abilities.wallBreakSpeedMult);
+    const totalSpeedMult = state.abilities.wallBreakSpeedMult * (1.0 + (state.abilities.wallBreakSpeedMult2 || 0));
+    cur.heatMs = Math.min(targetBreakMs * 1.2, cur.heatMs + addMs * totalSpeedMult);
     cur.lastMs = state.nowMs;
     chunk.wallHeat.set(key, cur);
 
@@ -1931,14 +1950,18 @@ function restartRun() {
         killMissileUnlocked: false,
         maxLives: 3,
         shieldMax: 0,
+        playerSizeMult: 1.0,
+        missileSpeedMult: 1.0,
+        wallBreakSpeedMult2: 0,
+        curses: [],
         // 금융 어빌리티
         bankDeposit: { enabled: false, intervalMs: 10000, timerMs: 0 },
         bankSaving: { enabled: false, targetFloors: 5, progress: 0 },
         livingLoan: { debt: 0, graceFloors: 0, repayAccMs: 0, penaltyAccMs: 0, penaltyRate: 0 },
         freeRerollTickets: 0,
         freeRerollRestoreCost: 1,
-        boughtCountByRarity: { COMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
-        rarityBonus: { COMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0 },
+        boughtCountByRarity: { COMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0, CURSE: 0 },
+        rarityBonus: { COMMON: 0, RARE: 0, EPIC: 0, LEGENDARY: 0, CURSE: 0 },
     };
     state.player.lives = state.abilities.maxLives;
 
@@ -2270,16 +2293,26 @@ function handleClick(e) {
 function updateUI() {
     const statusEl = document.getElementById('status');
     if (!statusEl) return; // 좌상단 범례(UI 오버레이)를 제거한 경우
+    
+    // 상태창 클릭 이벤트 추가 (한 번만)
+    if (!statusEl.dataset.clickListenerAdded) {
+        statusEl.style.cursor = 'pointer';
+        statusEl.addEventListener('click', openStatusDetailModal);
+        statusEl.dataset.clickListenerAdded = 'true';
+    }
+    
     if (state.mode === 'WORLD') {
-        statusEl.innerHTML = `상태: 월드 맵`;
+        statusEl.innerHTML = `상태: 월드 맵 (클릭하여 상세 보기)`;
     } else {
         const chaserOn = state.chaser.active ? '<span style="color:#ff5555;">ON</span>' : '<span style="color:#888;">OFF</span>';
         const inbound = (state.chaser.active && !state.chaser.isPresentInMaze) ? ' · <span style="color:#9ad1ff;">INBOUND</span>' : '';
         const stunned = (state.chaser.active && state.nowMs < state.chaser.stunUntilMs) ? ' · <span style="color:#ffd24d;">STUN</span>' : '';
         const speed = state.chaser.active ? (CONFIG.CHASER_SPEED * state.chaser.speedMult).toFixed(2) : '-';
+        const curseCount = (state.abilities.curses || []).length;
+        const curseText = curseCount > 0 ? ` · 저주: <span style="color:#ff4444;">${curseCount}개</span>` : '';
         statusEl.innerHTML =
-            `상태: 미로 (${state.currentChunk.x}, ${state.currentChunk.y})` +
-            `<br/>추격자: ${chaserOn}${inbound}${stunned} · 속도: ${speed} · 잡힘: ${state.chaser.caughtCount}` +
+            `상태: 미로 (${state.currentChunk.x}, ${state.currentChunk.y}) (클릭하여 상세 보기)` +
+            `<br/>추격자: ${chaserOn}${inbound}${stunned} · 속도: ${speed} · 잡힘: ${state.chaser.caughtCount}${curseText}` +
             `<br/>인벤토리: 미사일 <span style="color:#ffd24d;">${state.inventory.missiles}</span> (X로 발사)`;
     }
 
@@ -2311,6 +2344,105 @@ function updateUI() {
             !state.ui.modalOpen;
         missileBtn.disabled = !canFire;
     }
+}
+
+function openStatusDetailModal() {
+    // 상태창 상세 모달 생성 및 표시
+    let modal = document.getElementById('status-detail-modal');
+    if (!modal) {
+        // 모달이 없으면 동적으로 생성
+        modal = document.createElement('div');
+        modal.id = 'status-detail-modal';
+        modal.className = 'hidden';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.innerHTML = `
+            <div class="gameover-card" style="max-width: 600px;">
+                <div class="gameover-title">상태 상세</div>
+                <div id="status-detail-content" class="gameover-sub" style="text-align: left; padding: 20px;"></div>
+                <div class="gameover-actions">
+                    <button id="status-detail-close" class="btn btn-primary">닫기</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // 닫기 버튼 이벤트
+        document.getElementById('status-detail-close').addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+        
+        // ESC 키로 닫기
+        const escHandler = (e) => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                modal.classList.add('hidden');
+                window.removeEventListener('keydown', escHandler);
+            }
+        };
+        window.addEventListener('keydown', escHandler);
+    }
+    
+    // 내용 업데이트
+    const contentEl = document.getElementById('status-detail-content');
+    if (contentEl) {
+        const curses = state.abilities.curses || [];
+        const curseList = curses.length > 0 
+            ? curses.map(c => {
+                const remaining = Math.max(0, c.startMs + c.durationMs - state.nowMs);
+                const remainingSec = Math.ceil(remaining / 1000);
+                return `<div style="margin: 5px 0; color: #ff4444;">• ${c.name}: ${remainingSec}초 남음</div>`;
+            }).join('')
+            : '<div style="color: #888;">없음</div>';
+        
+        const abilities = [];
+        if (state.abilities.playerSizeMult < 1.0) {
+            const reduction = ((1.0 - state.abilities.playerSizeMult) * 100).toFixed(0);
+            abilities.push(`크기 감소: ${reduction}%`);
+        }
+        if (state.abilities.missileSpeedMult > 1.0) {
+            const boost = ((state.abilities.missileSpeedMult - 1.0) * 100).toFixed(0);
+            abilities.push(`미사일 속도: +${boost}%`);
+        }
+        if (state.abilities.wallBreakSpeedMult2 > 0) {
+            const boost = (state.abilities.wallBreakSpeedMult2 * 100).toFixed(0);
+            abilities.push(`벽 파괴 속도: +${boost}%`);
+        }
+        if (state.abilities.moveSpeedMult > 1.0) {
+            const boost = ((state.abilities.moveSpeedMult - 1.0) * 100).toFixed(1);
+            abilities.push(`이동 속도: +${boost}%`);
+        }
+        if (state.abilities.missileCount > 1) {
+            abilities.push(`미사일 개수: ${state.abilities.missileCount}개`);
+        }
+        if (state.abilities.shieldMax > 0) {
+            abilities.push(`실드: ${state.player.shieldCharges || 0}/${state.abilities.shieldMax}`);
+        }
+        
+        contentEl.innerHTML = `
+            <div style="margin-bottom: 15px;">
+                <strong style="color: #ffd24d;">보유 아이템:</strong>
+                <div style="margin-top: 5px;">
+                    미사일: ${state.inventory.missiles}개<br/>
+                    화약: ${state.inventory.gunpowder}개<br/>
+                    코인: ${state.coins}개
+                </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <strong style="color: #4a9eff;">작동 중인 능력:</strong>
+                <div style="margin-top: 5px;">
+                    ${abilities.length > 0 ? abilities.map(a => `<div>• ${a}</div>`).join('') : '<div style="color: #888;">없음</div>'}
+                </div>
+            </div>
+            <div>
+                <strong style="color: #ff4444;">저주 (${curses.length}개):</strong>
+                <div style="margin-top: 5px;">
+                    ${curseList}
+                </div>
+            </div>
+        `;
+    }
+    
+    modal.classList.remove('hidden');
 }
 
 function enterMaze(x, y, entryDir = state.nextEntryDir || 'S') {
@@ -2767,6 +2899,12 @@ function update(dt) {
         processPendingMissileShots();
         updateCollectiblesAndProjectiles(dt);
         updateFx(dt);
+        
+        // 저주 타이머 업데이트 및 만료된 저주 제거
+        updateCurses(dt);
+        
+        // 추가 추적자 업데이트
+        updateExtraChasers(dt);
 
         // 추격자 투사체 업데이트
         for (let i = state.chaserProjectiles.length - 1; i >= 0; i--) {
@@ -2778,7 +2916,8 @@ function update(dt) {
             const dx = state.player.mazePos.x - p.pos.x;
             const dy = state.player.mazePos.y - p.pos.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist < CONFIG.PLAYER_RADIUS + 0.1) {
+            const playerR = CONFIG.PLAYER_RADIUS * (state.abilities.playerSizeMult || 1.0);
+            if (dist < playerR + 0.1) {
                 state.chaserProjectiles.splice(i, 1);
                 applyPlayerHit({
                     livesLoss: 1,
@@ -3221,6 +3360,36 @@ function updateMaze(dt) {
     decayWallHeat(chunk, dt);
 }
 
+// 추가 추적자 생성 함수
+function addExtraChaser() {
+    const newChaser = {
+        chunk: { x: state.currentChunk.x, y: state.currentChunk.y },
+        pos: { x: state.player.mazePos.x + (Math.random() - 0.5) * 2, y: state.player.mazePos.y + (Math.random() - 0.5) * 2 },
+        path: [],
+        pathIndex: 0,
+        lastRepathMs: 0,
+        lastTargetTile: null,
+        graceUntilMs: state.nowMs + CONFIG.CHASER_GRACE_MS,
+        stunUntilMs: 0,
+        lastShotMs: 0,
+        entryScheduledUntilMs: 0,
+        entryScheduledDir: null,
+        entryScheduledPos: null,
+        isPresentInMaze: true,
+        nextEntryDelayMs: CONFIG.CHASER_ENTRY_DELAY_MS,
+        caughtCount: 0,
+        speedMult: 1.0,
+        slowUntilMs: 0,
+        deadUntilNextChunk: false,
+        respawnTimerMs: 0,
+        bossCooldownUntilMs: 0,
+        hp: CONFIG.MISSILE_DAMAGE * 5,
+        maxHp: CONFIG.MISSILE_DAMAGE * 5,
+        removeAtMs: state.nowMs + 60000, // 1분 후 제거
+    };
+    state.extraChasers.push(newChaser);
+}
+
 function updateChaser(dt) {
     if (!state.chaser.active) return;
     // 보스전 중에는 추격자 미사일/로직 자체를 진행하지 않음
@@ -3335,9 +3504,106 @@ function updateChaser(dt) {
     // 잡힘 판정
     const rx = state.chaser.pos.x - state.player.mazePos.x;
     const ry = state.chaser.pos.y - state.player.mazePos.y;
-    const hitR = CONFIG.CHASER_RADIUS + CONFIG.PLAYER_RADIUS;
+    const playerR = CONFIG.PLAYER_RADIUS * (state.abilities.playerSizeMult || 1.0);
+    const hitR = CONFIG.CHASER_RADIUS + playerR;
     if (rx * rx + ry * ry <= hitR * hitR) {
         resetAfterCaught();
+    }
+}
+
+function updateCurses(dt) {
+    // 만료된 저주 제거
+    for (let i = state.abilities.curses.length - 1; i >= 0; i--) {
+        const curse = state.abilities.curses[i];
+        if (state.nowMs >= curse.startMs + curse.durationMs) {
+            state.abilities.curses.splice(i, 1);
+        }
+    }
+}
+
+function updateExtraChasers(dt) {
+    if (!state.extraChasers || state.extraChasers.length === 0) return;
+    if (state.boss.active) return;
+    
+    const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
+    if (!chunk) return;
+    const maze = chunk.maze;
+    const dtSec = Math.min(dt, 50) / 1000;
+    const playerR = CONFIG.PLAYER_RADIUS * (state.abilities.playerSizeMult || 1.0);
+    
+    for (let i = state.extraChasers.length - 1; i >= 0; i--) {
+        const ch = state.extraChasers[i];
+        
+        // 만료 시간 체크
+        if (state.nowMs >= ch.removeAtMs) {
+            state.extraChasers.splice(i, 1);
+            continue;
+        }
+        
+        // 현재 청크에 없으면 스킵
+        if (ch.chunk.x !== state.currentChunk.x || ch.chunk.y !== state.currentChunk.y) {
+            continue;
+        }
+        
+        // 스턴/유예 시간 체크
+        if (state.nowMs < ch.stunUntilMs) continue;
+        if (state.nowMs < ch.graceUntilMs) continue;
+        
+        // 경로 찾기
+        const playerTile = { x: Math.floor(state.player.mazePos.x), y: Math.floor(state.player.mazePos.y) };
+        const chaserTile = { x: Math.floor(ch.pos.x), y: Math.floor(ch.pos.y) };
+        
+        const needRepath =
+            !ch.lastTargetTile ||
+            ch.lastTargetTile.x !== playerTile.x ||
+            ch.lastTargetTile.y !== playerTile.y ||
+            (state.nowMs - ch.lastRepathMs) > CONFIG.CHASER_REPATH_MS ||
+            ch.path.length === 0 ||
+            ch.pathIndex >= ch.path.length;
+        
+        if (needRepath) {
+            const path = bfsPath(maze, chaserTile, playerTile);
+            ch.path = path;
+            ch.pathIndex = path.length > 1 ? 1 : 0;
+            ch.lastRepathMs = state.nowMs;
+            ch.lastTargetTile = { ...playerTile };
+        }
+        
+        if (ch.path.length <= 1) continue;
+        
+        // 이동
+        let speed = CONFIG.CHASER_SPEED * ch.speedMult;
+        if (state.nowMs < ch.slowUntilMs) {
+            speed *= CONFIG.GUNPOWDER_SLOW_MULT;
+        }
+        const moveDist = speed * dtSec;
+        
+        let remaining = moveDist;
+        while (remaining > 0 && ch.pathIndex < ch.path.length) {
+            const target = ch.path[ch.pathIndex];
+            const tx = target.x + 0.5;
+            const ty = target.y + 0.5;
+            const dx = tx - ch.pos.x;
+            const dy = ty - ch.pos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 1e-6) {
+                ch.pathIndex += 1;
+                continue;
+            }
+            const step = Math.min(remaining, dist);
+            ch.pos.x += (dx / dist) * step;
+            ch.pos.y += (dy / dist) * step;
+            remaining -= step;
+            if (step === dist) ch.pathIndex += 1;
+        }
+        
+        // 잡힘 판정
+        const rx = ch.pos.x - state.player.mazePos.x;
+        const ry = ch.pos.y - state.player.mazePos.y;
+        const hitR = CONFIG.CHASER_RADIUS + playerR;
+        if (rx * rx + ry * ry <= hitR * hitR) {
+            resetAfterCaught();
+        }
     }
 }
 
@@ -3454,7 +3720,8 @@ function updateCollectiblesAndProjectiles(dt) {
             if (c.picked) continue;
             const dx = state.player.mazePos.x - c.x;
             const dy = state.player.mazePos.y - c.y;
-            if (dx * dx + dy * dy <= (CONFIG.PLAYER_RADIUS + 0.22) ** 2) {
+            const playerR = CONFIG.PLAYER_RADIUS * (state.abilities.playerSizeMult || 1.0);
+            if (dx * dx + dy * dy <= (playerR + 0.22) ** 2) {
                 c.picked = true;
                 addCoins(1);
                 // 동전 먹을 때 +5점
@@ -3481,7 +3748,8 @@ function updateCollectiblesAndProjectiles(dt) {
 
     // 아이템(미사일) 획득 판정
     if (state.items?.length) {
-        const r = CONFIG.PLAYER_RADIUS + 0.25;
+        const playerR = CONFIG.PLAYER_RADIUS * (state.abilities.playerSizeMult || 1.0);
+        const r = playerR + 0.25;
         for (let i = state.items.length - 1; i >= 0; i--) {
             const it = state.items[i];
             const dx = state.player.mazePos.x - it.pos.x;
@@ -3498,7 +3766,8 @@ function updateCollectiblesAndProjectiles(dt) {
 
     // 하트 획득 판정
     if (state.hearts?.length) {
-        const r = CONFIG.PLAYER_RADIUS + 0.28;
+        const playerR = CONFIG.PLAYER_RADIUS * (state.abilities.playerSizeMult || 1.0);
+        const r = playerR + 0.28;
         for (let i = state.hearts.length - 1; i >= 0; i--) {
             const h = state.hearts[i];
             const dx = state.player.mazePos.x - h.pos.x;
@@ -3583,14 +3852,15 @@ function updateCollectiblesAndProjectiles(dt) {
             const dy = targetY - m.pos.y;
             const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-            const desiredVx = (dx / dist) * CONFIG.MISSILE_SPEED;
-            const desiredVy = (dy / dist) * CONFIG.MISSILE_SPEED;
+            const missileSpeed = CONFIG.MISSILE_SPEED * (state.abilities.missileSpeedMult || 1.0);
+            const desiredVx = (dx / dist) * missileSpeed;
+            const desiredVy = (dy / dist) * missileSpeed;
             const tt = 1 - Math.exp(-CONFIG.MISSILE_TURN_RATE * dtSec);
             m.vel.x += (desiredVx - m.vel.x) * tt;
             m.vel.y += (desiredVy - m.vel.y) * tt;
             const vMag = Math.sqrt(m.vel.x * m.vel.x + m.vel.y * m.vel.y) || 1;
-            m.vel.x = (m.vel.x / vMag) * CONFIG.MISSILE_SPEED;
-            m.vel.y = (m.vel.y / vMag) * CONFIG.MISSILE_SPEED;
+            m.vel.x = (m.vel.x / vMag) * missileSpeed;
+            m.vel.y = (m.vel.y / vMag) * missileSpeed;
 
             // 트레일(공유 타이머)
             if (state.nowMs - state.fx.lastTrailMs > 30) {
@@ -3817,8 +4087,9 @@ function actuallyFireOneMissile() {
     const dx = targetX - state.player.mazePos.x;
     const dy = targetY - state.player.mazePos.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const vx = (dx / dist) * CONFIG.MISSILE_SPEED;
-    const vy = (dy / dist) * CONFIG.MISSILE_SPEED;
+    const missileSpeed = CONFIG.MISSILE_SPEED * (state.abilities.missileSpeedMult || 1.0);
+    const vx = (dx / dist) * missileSpeed;
+    const vy = (dy / dist) * missileSpeed;
     state.missiles.push({
         pos: { x: state.player.mazePos.x, y: state.player.mazePos.y },
         vel: { x: vx, y: vy },
@@ -3952,7 +4223,7 @@ function onMissileHitTarget(m) {
 function applyMovementWithSliding(vx, vy, inputIntensity = 1.0, dt = 16) {
     const chunk = state.chunks.get(getChunkKey(state.currentChunk.x, state.currentChunk.y));
     const maze = chunk.maze;
-    const r = CONFIG.PLAYER_RADIUS;
+    const r = CONFIG.PLAYER_RADIUS * (state.abilities.playerSizeMult || 1.0);
     const intensity = Math.max(0, Math.min(1, inputIntensity));
     // 가까운 구간에서 더 오래 작게 유지되도록 비선형(가속) 커브 적용
     const t = Math.pow(intensity, 2.2);
@@ -4691,6 +4962,7 @@ function drawMiniMap(x, y, w, h) {
             const k = getChunkKey(wx, wy);
             const ch = state.chunks.get(k);
             const isBoss = ((wy + 1) % 20 === 0);
+            const isFloor10 = ((wy + 1) % 10 === 0); // 10층마다 파란색 표시
             const isVisited = state.visitedChunks.has(k);
             const isCurrent = (wx === cx && wy === cy);
 
@@ -4698,7 +4970,9 @@ function drawMiniMap(x, y, w, h) {
             if (!ch) fill = 'rgba(0,0,0,0.55)';
             else if (isVisited && !isCurrent) fill = 'rgba(20,20,20,0.85)'; // 방문한 청크는 매우 어둡게
             else if (ch.cleared) fill = 'rgba(26,75,26,0.75)';
-            else fill = isBoss ? 'rgba(120,30,30,0.70)' : 'rgba(60,60,65,0.75)';
+            else if (isBoss) fill = 'rgba(120,30,30,0.70)'; // 보스방: 빨간색
+            else if (isFloor10) fill = 'rgba(68, 136, 255, 0.70)'; // 10층마다: 파란색
+            else fill = 'rgba(60,60,65,0.75)';
 
             const px = x + wx * cellW;
             const py = y + ry * cellH;
@@ -5121,14 +5395,16 @@ function drawMaze() {
         const nextY = state.currentChunk.y + 1;
         const key = getChunkKey(nextX, nextY);
         const isVisited = state.visitedChunks.has(key);
-        const isFloor10 = (currentFloor === 9 && nextY + 1 === 10);
+        const nextFloor = nextY + 1;
+        const isFloor10 = (nextFloor % 10 === 0); // 10층마다 표시
         
         if (isVisited || isFloor10) {
             const midX = Math.floor(CONFIG.MAZE_SIZE / 2);
             const tileX = offsetX + midX * cellSize;
             const tileY = offsetY + 0 * cellSize;
             
-            ctx.fillStyle = isVisited ? `rgba(255, 68, 68, ${overlayAlpha})` : `rgba(68, 136, 255, ${overlayAlpha})`;
+            // 10층 단위는 파란색 우선, 방문한 청크는 빨간색
+            ctx.fillStyle = isFloor10 ? `rgba(68, 136, 255, ${overlayAlpha})` : `rgba(255, 68, 68, ${overlayAlpha})`;
             ctx.fillRect(tileX, tileY, cellSize, cellSize);
         }
     }
@@ -5287,7 +5563,7 @@ function drawMaze() {
         ctx,
         pScreenX,
         pScreenY,
-        cellSize * CONFIG.PLAYER_RADIUS,
+        cellSize * CONFIG.PLAYER_RADIUS * (state.abilities.playerSizeMult || 1.0),
         state.nowMs,
         { quality: 'mid', spin: 0.0016 }
     );
@@ -5338,7 +5614,7 @@ function drawMaze() {
     // 아이템 획득 시 플레이어 노란 틴트(서서히 사라짐)
     if (state.fx.playerTint?.a > 0.001) {
         const a = Math.max(0, Math.min(1, state.fx.playerTint.a));
-        const rr = cellSize * CONFIG.PLAYER_RADIUS * 2.1;
+        const rr = cellSize * CONFIG.PLAYER_RADIUS * (state.abilities.playerSizeMult || 1.0) * 2.1;
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = 0.55 * a;
@@ -5660,6 +5936,72 @@ function drawMaze() {
             ctx.beginPath();
             ctx.arc(cX, cY, Math.max(0, rr), 0, Math.PI * 2);
             ctx.stroke();
+        }
+    }
+
+    // 추가 추격자 렌더 (미로 내부)
+    if (state.extraChasers && state.extraChasers.length > 0 && !state.boss.active) {
+        for (const ch of state.extraChasers) {
+            if (ch.chunk.x !== state.currentChunk.x || ch.chunk.y !== state.currentChunk.y) continue;
+            if (!ch.isPresentInMaze) continue;
+            if (ch.deadUntilNextChunk) continue;
+            
+            const cX = offsetX + ch.pos.x * cellSize;
+            const cY = offsetY + ch.pos.y * cellSize;
+            
+            let alpha = (state.nowMs < ch.graceUntilMs) ? 0.35 : 0.95;
+            
+            let ang = 0;
+            try {
+                const path = ch.path || [];
+                const idx = ch.pathIndex ?? 0;
+                if (path.length > 0 && idx < path.length) {
+                    const tgt = path[Math.min(idx, path.length - 1)];
+                    const tx = (tgt.x ?? 0) + 0.5;
+                    const ty = (tgt.y ?? 0) + 0.5;
+                    const dx = tx - ch.pos.x;
+                    const dy = ty - ch.pos.y;
+                    ang = Math.atan2(dy, dx);
+                } else {
+                    const dx = state.player.mazePos.x - ch.pos.x;
+                    const dy = state.player.mazePos.y - ch.pos.y;
+                    ang = Math.atan2(dy, dx);
+                }
+            } catch (_) {}
+            
+            const imgReady = !!(CHASER_IMG && CHASER_IMG.complete && CHASER_IMG.naturalWidth > 0);
+            const chaserSize = cellSize * CONFIG.CHASER_RADIUS * 3;
+            if (imgReady) {
+                ctx.save();
+                ctx.translate(cX, cY);
+                ctx.rotate(ang);
+                ctx.globalAlpha = alpha;
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = 'rgba(255, 80, 80, 0.65)';
+                ctx.drawImage(CHASER_IMG, -chaserSize / 2, -chaserSize / 2, chaserSize, chaserSize);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = `rgba(255, 80, 80, ${alpha})`;
+                ctx.shadowBlur = 25;
+                ctx.shadowColor = 'rgba(255, 80, 80, 0.9)';
+                ctx.beginPath();
+                ctx.arc(cX, cY, chaserSize / 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+            
+            // 스턴 링
+            if (state.nowMs < ch.stunUntilMs) {
+                const totalStunMs = CONFIG.STUN_MS + (state.abilities.missileStunBonusMs || 0);
+                const remaining = ch.stunUntilMs - state.nowMs;
+                const k = 1 - Math.max(0, Math.min(1, remaining / totalStunMs));
+                const rr = (CONFIG.CHASER_RADIUS + 0.10 + k * 0.45) * cellSize;
+                ctx.strokeStyle = 'rgba(255, 210, 77, 0.75)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(cX, cY, Math.max(0, rr), 0, Math.PI * 2);
+                ctx.stroke();
+            }
         }
     }
 

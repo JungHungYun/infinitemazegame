@@ -76,7 +76,8 @@ const CONFIG = {
         COMMON: 0.71,
         RARE: 0.20,
         EPIC: 0.08,
-        LEGENDARY: 0.01
+        LEGENDARY: 0.01,
+        CURSE: 0.03 // 저주 등급은 3% 고정 확률
     },
 
     DEBUG: false, // 디버그 모드 (true 설정 시 벽부수기 해제, 코인/미사일 1000개 시작)

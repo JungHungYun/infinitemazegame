@@ -114,28 +114,9 @@ const ABILITY_DEFS = [
         apply: () => {},
     },
     {
-        id: 'free_ticket',
-        name: '리롤 쿠폰',
-        desc: '어빌리티 리롤을 3회 무료로 사용할 수 있는 티켓을 획득합니다. 티켓은 다음 상점에서도 사용할 수 있으며, 무료 티켓을 모두 사용하면 리롤 비용이 구매 직전 상태로 복구됩니다. 리롤 비용이 계속 증가하는 상황에서 유용합니다.',
-        rarity: 'COMMON',
-        cost: 3,
-        noExtraCost: true,
-        available: () => true,
-        apply: () => {
-            const add = 3;
-            const curTickets = Math.max(0, Math.floor(state.abilities.freeRerollTickets || 0));
-            // 티켓이 없던 상태에서 처음 구매하는 경우에만 "구매 직전 비용"을 저장
-            if (curTickets <= 0) {
-                state.abilities.freeRerollRestoreCost = Math.max(1, Math.floor(state.ui.abilityRerollCost || 1));
-            }
-            state.abilities.freeRerollTickets = curTickets + add;
-        },
-    },
-
-    {
         id: 'wall_break_speed',
         name: '파워 해머',
-        desc: `벽을 문대는 속도가 10% 증가합니다. 벽을 부수는 데 걸리는 시간이 줄어들어 더 빠르게 진행할 수 있습니다. 최대 ${CONFIG.MAX_WALL_BREAK_SPEED_MULT}배까지 강화 가능하며, 벽부수기 능력을 먼저 획득해야 합니다.`,
+        desc: `벽을 부수는 속도가 10% 증가합니다. 벽을 부수는 데 걸리는 시간이 줄어들어 더 빠르게 진행할 수 있습니다. 최대 ${CONFIG.MAX_WALL_BREAK_SPEED_MULT}배까지 강화 가능합니다.`,
         rarity: 'RARE',
         cost: 5,
         // 예전에는 wallBreakUnlocked가 false면 "아예 뽑히지 않아서" 누락처럼 보였음.
@@ -424,6 +405,72 @@ const ABILITY_DEFS = [
             state.abilities.heartDropChance = Math.min(0.10, (state.abilities.heartDropChance ?? 0) + 0.001);
         },
     },
+    // ===== 새로운 어빌리티 =====
+    {
+        id: 'size_reduction',
+        name: '크기 감소',
+        desc: '캐릭터 크기가 20% 감소합니다. 히트박스도 함께 감소하여 벽과의 충돌이 줄어들고 더 좁은 공간을 통과할 수 있습니다. 최대 2회까지 획득 가능하며, 중첩 시 총 36% 감소합니다.',
+        rarity: 'RARE',
+        cost: 20,
+        available: () => {
+            const count = Math.floor((1.0 - (state.abilities.playerSizeMult || 1.0)) / 0.2);
+            return count < 2;
+        },
+        apply: () => {
+            state.abilities.playerSizeMult = Math.max(0.64, (state.abilities.playerSizeMult || 1.0) * 0.8);
+        },
+    },
+    {
+        id: 'missile_booster',
+        name: '미사일 부스터',
+        desc: '미사일 속도가 20% 증가합니다. 더 빠른 미사일로 추격자를 더 쉽게 맞출 수 있습니다. 최대 3회까지 획득 가능하며, 중첩 시 총 72.8% 증가합니다.',
+        rarity: 'RARE',
+        cost: 10,
+        available: () => {
+            const count = Math.floor(((state.abilities.missileSpeedMult || 1.0) - 1.0) / 0.2);
+            return count < 3;
+        },
+        apply: () => {
+            state.abilities.missileSpeedMult = Math.min(1.728, (state.abilities.missileSpeedMult || 1.0) * 1.2);
+        },
+    },
+    {
+        id: 'wall_break_machine',
+        name: '벽 파괴 머신',
+        desc: '벽을 부수는 속도가 30% 증가합니다. 벽을 더 빠르게 부수어 진행 속도가 향상됩니다. 최대 2회까지 획득 가능하며, 중첩 시 총 60% 증가합니다.',
+        rarity: 'EPIC',
+        cost: 15,
+        available: () => {
+            const count = Math.floor((state.abilities.wallBreakSpeedMult2 || 0) / 0.3);
+            return count < 2;
+        },
+        apply: () => {
+            state.abilities.wallBreakSpeedMult2 = Math.min(0.6, (state.abilities.wallBreakSpeedMult2 || 0) + 0.3);
+        },
+    },
+    {
+        id: 'infectious_chaser',
+        name: '전염하는 추적자',
+        desc: '추적자가 1마리 추가됩니다. 추가된 추적자는 1분 동안 유지되며, 저주가 추가될 때마다 1마리가 계속 추가됩니다. 각 추적자는 독립적으로 작동하며, 1분이 경과하면 자동으로 제거됩니다.',
+        rarity: 'CURSE',
+        cost: 0,
+        noExtraCost: true,
+        available: () => true,
+        apply: () => {
+            // 저주 추가
+            const curse = {
+                id: 'infectious_chaser',
+                name: '전염하는 추적자',
+                desc: '추적자가 1마리 추가됩니다. 1분 동안 유지됩니다.',
+                startMs: state.nowMs,
+                durationMs: 60000, // 1분
+            };
+            state.abilities.curses.push(curse);
+            
+            // 추적자 추가 (다중 추적자 시스템 사용)
+            addExtraChaser();
+        },
+    },
 ];
 
 function openAbilityModal(floor) {
@@ -502,6 +549,17 @@ function rollAbilityChoices() {
     // 구매 버튼에서 잠김/사유를 명확히 보여준다.
     const isEligibleToShow = (a) => a.available();
 
+    // 저주 등장 여부 먼저 체크 (3% 확률, 다른 아이템이 나온 후에 등장)
+    let curseAppeared = false;
+    let curseChoice = null;
+    if (Math.random() < CONFIG.RARITY_PROBS.CURSE) {
+        const cursePool = ABILITY_DEFS.filter(a => a.rarity === 'CURSE' && isEligibleToShow(a));
+        if (cursePool.length > 0) {
+            curseAppeared = true;
+            curseChoice = cursePool[Math.floor(Math.random() * cursePool.length)];
+        }
+    }
+
     // 슬롯 개수만큼 뽑기
     for (let slot = 0; slot < slotCount; slot++) {
         // 희귀도 결정
@@ -542,6 +600,19 @@ function rollAbilityChoices() {
             choices.push(a.id);
         }
     }
+    
+    // 저주가 등장하면 마지막 슬롯을 저주로 교체하고 자동 구매
+    if (curseAppeared && curseChoice && choices.length > 0) {
+        choices[choices.length - 1] = curseChoice.id;
+        // 자동 구매
+        const def = curseChoice;
+        if (def.apply) {
+            def.apply();
+            state.ui.boughtAbilities.add(curseChoice.id);
+            if (!def.noExtraCost) state.abilities.boughtCountByRarity['CURSE']++;
+        }
+    }
+    
     state.ui.abilityChoices = choices;
 }
 
@@ -611,7 +682,8 @@ function renderAbilityModal(floor = getFloor()) {
 
         const rarityBadge = document.createElement('div');
         rarityBadge.className = `rarity-badge bg-${def.rarity.toLowerCase()}`;
-        rarityBadge.textContent = def.rarity === 'COMMON' ? '일반' : def.rarity === 'RARE' ? '희귀' : def.rarity === 'EPIC' ? '영웅' : '전설';
+        const rarityText = def.rarity === 'COMMON' ? '일반' : def.rarity === 'RARE' ? '희귀' : def.rarity === 'EPIC' ? '영웅' : def.rarity === 'LEGENDARY' ? '전설' : '저주';
+        rarityBadge.textContent = rarityText;
 
         const name = document.createElement('div');
         name.className = 'ability-name';
