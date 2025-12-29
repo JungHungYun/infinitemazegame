@@ -4,11 +4,18 @@
 let selectedSkinId = null;
 
 function openSkinSelectModal() {
+    console.log('openSkinSelectModal called');
     const modal = document.getElementById('skin-select-modal');
-    if (!modal) return;
+    if (!modal) {
+        console.warn('skin-select-modal element not found');
+        return;
+    }
     
+    console.log('Opening skin select modal');
     modal.classList.remove('hidden');
-    state.ui.modalOpen = true;
+    if (typeof state !== 'undefined' && state.ui) {
+        state.ui.modalOpen = true;
+    }
     renderSkinChoices();
 }
 
@@ -17,8 +24,14 @@ function closeSkinSelectModal() {
     if (!modal) return;
     
     modal.classList.add('hidden');
-    state.ui.modalOpen = false;
+    if (typeof state !== 'undefined' && state.ui) {
+        state.ui.modalOpen = false;
+    }
 }
+
+// 전역 함수로 즉시 노출 (game.js에서 호출하기 위해)
+window.openSkinSelectModal = openSkinSelectModal;
+window.closeSkinSelectModal = closeSkinSelectModal;
 
 function renderSkinChoices() {
     const container = document.getElementById('skin-choices');
@@ -76,14 +89,16 @@ function initSkinSelectUI() {
         }
         
         // 선택된 스킨 저장 (나중에 게임에서 사용)
-        if (selectedSkinId) {
+        if (selectedSkinId && typeof state !== 'undefined' && state.player) {
             state.player.selectedSkin = selectedSkinId;
         }
         
         closeSkinSelectModal();
         
         // 스킨 선택 완료 후 게임 시작
-        if (typeof startGameAfterSkinSelect === 'function') {
+        if (typeof window.startGameAfterSkinSelect === 'function') {
+            window.startGameAfterSkinSelect();
+        } else if (typeof startGameAfterSkinSelect === 'function') {
             startGameAfterSkinSelect();
         }
     });
@@ -95,10 +110,6 @@ function initSkinSelectUI() {
         }
     });
 }
-
-// 전역 함수로 노출 (game.js에서 호출하기 위해)
-window.openSkinSelectModal = openSkinSelectModal;
-window.closeSkinSelectModal = closeSkinSelectModal;
 
 // DOM ready
 if (document.readyState === 'loading') {

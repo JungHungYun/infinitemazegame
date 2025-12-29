@@ -242,6 +242,20 @@ canvas {
     display: flex;
 }
 
+/* 스킨 선택 모달 */
+#skin-select-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    align-items: center;
+    justify-content: center;
+    z-index: 50; /* 타이틀 화면(30)보다 위에 표시 */
+}
+
+#skin-select-modal:not(.hidden) {
+    display: flex;
+}
+
 .settings-card {
     width: min(680px, calc(100vw - 24px));
     background: rgba(12, 12, 12, 0.95);

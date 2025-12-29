@@ -980,6 +980,8 @@ function buildChunkMazeTexture(chunk) {
                         g.drawImage(v, px, py, tile, tile);
                     } else {
                         // 일반 벽은 이미지 사용 (명도 감소 + 그림자 효과 + 레벨별 색상)
+                        // 레거시 벽(값이 1)은 기본 레벨(0, 갈색)로 처리
+                        const actualWallValue = wallValue === 1 ? 1 : wallValue;
                         g.save();
                         // 그림자 효과 (벽 가장자리)
                         g.shadowBlur = 8;
@@ -992,7 +994,7 @@ function buildChunkMazeTexture(chunk) {
                         g.drawImage(WALL_IMG, px, py, tile, tile);
                         
                         // 레벨별 색상 적용 (wallValue - 1이 레벨 인덱스)
-                        const lv = wallValue - 1;
+                        const lv = actualWallValue - 1;
                         if (lv >= 0 && lv < CONFIG.WALL_LEVELS.length) {
                             const wallColor = CONFIG.WALL_LEVELS[lv].color;
                             // color 모드로 색상만 적용 (명도는 유지하여 질감 보존)
@@ -1020,21 +1022,25 @@ function buildChunkMazeTexture(chunk) {
                     }
                 }
             } else {
-                // 기존 방식 (이미지가 없을 때)
+                // 기존 방식 (이미지가 없을 때) - 레거시 벽 제거: 값이 1인 벽은 기본 레벨로 처리
                 let v;
                 if (isWall) {
+                    // 레거시 벽(값이 1)은 기본 레벨(0, 갈색)로 처리
+                    const actualWallValue = wallValue === 1 ? 1 : wallValue;
                     // 화약 여부 판정 (Stable RNG + "한 번 부쉈으면 일반 벽" 규칙 반영)
-                    const hasGunpowder = hasGunpowderMarkOnWall(chunk, x, y, wallValue);
+                    const hasGunpowder = hasGunpowderMarkOnWall(chunk, x, y, actualWallValue);
 
-                    if (wallValue === 100) {
+                    if (actualWallValue === 100) {
                         v = goldWallVariants[(x * 31 + y * 17) % goldWallVariants.length];
-                    } else if (wallValue === 200) {
+                    } else if (actualWallValue === 200) {
                         v = blackWallVariants[(x * 31 + y * 17) % blackWallVariants.length];
                     } else if (hasGunpowder) {
                         v = gunpowderWallVariants[(x * 31 + y * 17) % gunpowderWallVariants.length];
                     } else {
-                        const lv = wallValue - 1;
-                        const variants = wallVariantsByLevel[lv];
+                        const lv = actualWallValue - 1;
+                        // 레거시 벽(값이 1)은 레벨 0으로 처리
+                        const safeLv = (lv >= 0 && lv < wallVariantsByLevel.length) ? lv : 0;
+                        const variants = wallVariantsByLevel[safeLv];
                         v = variants[(x * 31 + y * 17) % variants.length];
                     }
                 } else {
@@ -1636,20 +1642,31 @@ class Chunk {
             this.carve(grid, mid, mid);
         }
 
-        // ... (나머지 로직은 그대로)
+        // 모든 벽에 벽 레벨 할당 (레거시 벽 제거)
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
                 if (grid[y][x] === 1) {
                     if (x === 0 || x === size - 1 || y === 0 || y === size - 1) {
-                        grid[y][x] = 200;
+                        grid[y][x] = 200; // 외곽 벽은 검정색
                         continue;
                     }
                     if (state.abilities.goldWallUnlocked && rng() < state.abilities.goldWallProb) {
-                        grid[y][x] = 100;
+                        grid[y][x] = 100; // 사금벽
                     } else {
                         const level = rng() < dist.nextProb ? dist.nextLevel : dist.baseLevel;
-                        grid[y][x] = level + 1;
+                        grid[y][x] = level + 1; // 벽 레벨 할당 (값이 1이 아닌 레벨+1)
                     }
+                }
+            }
+        }
+        
+        // 레거시 벽(값이 1인 벽)이 남아있지 않도록 보장
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                if (grid[y][x] === 1) {
+                    // 아직 값이 1인 벽이 있다면 기본 레벨로 설정
+                    const level = dist.baseLevel;
+                    grid[y][x] = level + 1;
                 }
             }
         }
@@ -1880,11 +1897,22 @@ function initTitleScreenUI() {
         if (state.ui.started) return;
         
         // 로그인 상태인 경우 스킨 선택 창 표시
+        console.log('Checking login status:', window.currentUser);
         if (window.currentUser) {
-            if (typeof openSkinSelectModal === 'function') {
-                openSkinSelectModal();
-                return; // 스킨 선택 후 startGameAfterSkinSelect에서 게임 시작
+            console.log('User is logged in, opening skin select modal');
+            console.log('openSkinSelectModal type:', typeof window.openSkinSelectModal);
+            if (typeof window.openSkinSelectModal === 'function') {
+                try {
+                    window.openSkinSelectModal();
+                    return; // 스킨 선택 후 startGameAfterSkinSelect에서 게임 시작
+                } catch (error) {
+                    console.error('Error opening skin select modal:', error);
+                }
+            } else {
+                console.warn('openSkinSelectModal function not found, starting game directly');
             }
+        } else {
+            console.log('User is not logged in, starting game directly');
         }
         
         // 로그인하지 않은 경우 또는 스킨 선택 후 바로 게임 시작

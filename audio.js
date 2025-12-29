@@ -513,9 +513,20 @@ function tickWallRubAudio(nowMs) {
 function setWallRubContact(isContact, intensity = 1) {
     const wr = state.audio.wallRub;
     // 모바일 최적화: unlocked 대신 gestureUnlocked 체크 (마찰소리는 제스처만 있으면 재생 가능)
-    if (!state.audio.gestureUnlocked) return;
+    if (!state.audio.gestureUnlocked) {
+        // 디버깅: gestureUnlocked가 false인 경우 로그
+        if (isContact) {
+            console.warn('[wallRub] gestureUnlocked is false, cannot play sound');
+        }
+        return;
+    }
     
     const ctx = ensureSfxContext();
+    
+    // 버퍼가 없으면 로드 시도
+    if (ctx && !wr.buffer) {
+        loadWallRubBuffer().catch(() => {});
+    }
     
     // WebAudio 사용 시
     if (ctx && wr.buffer) {
@@ -601,7 +612,13 @@ function setWallRubContact(isContact, intensity = 1) {
     
     // 레거시: Audio 엘리먼트 사용 (WebAudio가 없는 경우)
     const el = ensureWallRubAudioElement();
-    if (!el || typeof el.play !== 'function') return;
+    if (!el || typeof el.play !== 'function') {
+        // 디버깅: Audio 엘리먼트가 없는 경우
+        if (isContact) {
+            console.warn('[wallRub] Audio element not available');
+        }
+        return;
+    }
 
     if (isContact) {
         // 강도에 따라 볼륨 스케일
