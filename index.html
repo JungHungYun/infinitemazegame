@@ -137,6 +137,22 @@
         </div>
     </div>
 
+    <!-- 캐릭터 스킨 선택 모달 -->
+    <div id="skin-select-modal" class="hidden" role="dialog" aria-modal="true" aria-label="캐릭터 스킨 선택">
+        <div class="ability-card">
+            <div class="ability-header">
+                <div class="ability-title">캐릭터 스킨 선택</div>
+                <div class="ability-sub">원하는 스킨을 선택하세요</div>
+            </div>
+
+            <div id="skin-choices" class="ability-choices"></div>
+
+            <div class="ability-actions">
+                <button id="skin-select-confirm" class="btn btn-primary">선택 완료</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 벽부수기 알림 모달 -->
     <div id="wallbreak-notice-modal" class="hidden" role="dialog" aria-modal="true" aria-label="벽부수기 능력 습득">
         <div class="gameover-card">
@@ -184,6 +200,7 @@
     <script src="audio.js?v=20251227_16"></script>
     <script src="ui_settings.js?v=20251227_16"></script>
     <script src="ui_ability.js?v=20251227_16"></script>
+    <script src="ui_skin.js?v=20251227_16"></script>
     <script src="game.js?v=20251227_16"></script>
     <script>
         // 리더보드가 "불러오는 중..."에서 멈출 때 원인 파악용 안전장치

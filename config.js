@@ -80,6 +80,12 @@ const CONFIG = {
         CURSE: 0.03 // 저주 등급은 3% 고정 확률
     },
 
+    // 캐릭터 스킨 설정
+    CHARACTER_SKINS: [
+        { id: 'default', name: '기본', unlocked: true },
+        // 추가 스킨은 나중에 구현
+    ],
+
     DEBUG: false, // 디버그 모드 (true 설정 시 벽부수기 해제, 코인/미사일 1000개 시작)
 };
 

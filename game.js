@@ -987,16 +987,17 @@ function buildChunkMazeTexture(chunk) {
                         g.shadowOffsetX = 2;
                         g.shadowOffsetY = 2;
                         
-                        // 벽 이미지 그리기
-                        g.globalAlpha = 0.5; // 명도 50% 감소
+                        // 벽 이미지 그리기 (명도 조정: 더 밝게)
+                        g.globalAlpha = 0.75; // 명도 25% 감소 (기존 50%에서 증가)
                         g.drawImage(WALL_IMG, px, py, tile, tile);
                         
                         // 레벨별 색상 적용 (wallValue - 1이 레벨 인덱스)
                         const lv = wallValue - 1;
                         if (lv >= 0 && lv < CONFIG.WALL_LEVELS.length) {
                             const wallColor = CONFIG.WALL_LEVELS[lv].color;
-                            g.globalCompositeOperation = 'multiply';
-                            g.globalAlpha = 0.6; // 색상 강도
+                            // color 모드로 색상만 적용 (명도는 유지하여 질감 보존)
+                            g.globalCompositeOperation = 'color';
+                            g.globalAlpha = 1.0; // 색상 강도 최대화
                             g.fillStyle = `rgb(${wallColor[0]}, ${wallColor[1]}, ${wallColor[2]})`;
                             g.fillRect(px, py, tile, tile);
                             g.globalCompositeOperation = 'source-over';
@@ -1042,14 +1043,21 @@ function buildChunkMazeTexture(chunk) {
                 g.drawImage(v, px, py, tile, tile);
             }
 
-            // 바닥은 더 밝게, 벽은 더 어둡게 추가 보정(명도차 강화)
+            // 바닥은 더 어둡게, 벽은 더 어둡게 추가 보정(명도차 강화)
             if (!isWall) {
-                g.globalAlpha = 0.15; // 밝게 보정 강화
-                g.fillStyle = 'rgba(255,255,255,1)';
+                g.globalAlpha = 0.25; // 어둡게 보정 (시인성 향상)
+                g.fillStyle = 'rgba(0,0,0,1)';
                 g.fillRect(px, py, tile, tile);
                 g.globalAlpha = 1;
             } else {
-                g.globalAlpha = 0.70; // 어둡게 보정 더 강화
+                // 벽 이미지를 사용하는 경우 어둡게 보정을 줄임
+                const useTileImages = WALL_IMG.complete && WALL_IMG.naturalWidth > 0 && GROUND_IMGS[0].complete && GROUND_IMGS[0].naturalWidth > 0;
+                if (useTileImages && wallValue > 0 && wallValue !== 100 && wallValue !== 200) {
+                    // 벽 이미지를 사용하는 경우 보정을 줄임
+                    g.globalAlpha = 0.25; // 어둡게 보정 감소 (기존 0.70에서 감소)
+                } else {
+                    g.globalAlpha = 0.70; // 레거시 타일은 기존대로
+                }
                 g.fillStyle = 'rgba(0,0,0,1)';
                 g.fillRect(px, py, tile, tile);
                 g.globalAlpha = 1;
@@ -1869,6 +1877,26 @@ function initTitleScreenUI() {
     state.ui.started = false;
 
     const start = async () => {
+        if (state.ui.started) return;
+        
+        // 로그인 상태인 경우 스킨 선택 창 표시
+        if (window.currentUser) {
+            if (typeof openSkinSelectModal === 'function') {
+                openSkinSelectModal();
+                return; // 스킨 선택 후 startGameAfterSkinSelect에서 게임 시작
+            }
+        }
+        
+        // 로그인하지 않은 경우 또는 스킨 선택 후 바로 게임 시작
+        await startGame();
+    };
+    
+    // 스킨 선택 후 게임 시작 함수
+    window.startGameAfterSkinSelect = async () => {
+        await startGame();
+    };
+    
+    const startGame = async () => {
         if (state.ui.started) return;
         // 이미지가 반영되지 않는 문제 방지: 시작 전에 프리로드를 1회 기다림
         if (btn) {
